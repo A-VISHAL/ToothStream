@@ -5,7 +5,7 @@ set "ROOT=%~dp0"
 set "BACKEND=%ROOT%backend"
 set "FRONTEND=%ROOT%frontend"
 set "BACKEND_PYTHON=%BACKEND%\venv\Scripts\python.exe"
-set "BACKEND_PORT=8011"
+set "BACKEND_PORT=8000"
 set "FRONTEND_PORT=3002"
 
 if not exist "%BACKEND_PYTHON%" (
