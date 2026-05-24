@@ -1,0 +1,6 @@
+fastapi
+websockets
+python-dotenv
+deepgram-sdk==3.*
+uvicorn
+aiohttp
