@@ -53,20 +53,30 @@ function Dashboard() {
           </div>
         </header>
 
-        <main className="grid flex-1 gap-4 xl:grid-cols-[360px,minmax(0,1fr)] xl:items-start">
-          <aside className="min-h-0 self-start">
-            <TranscriptPanel
-              connectionState={connectionState}
-              isMockStream={isMockStream}
-              currentTooth={currentTooth}
-              currentSurface={currentSurface}
-              activeSiteIndex={activeSiteIndex}
-              transcripts={transcripts}
-            />
+        <main className="grid flex-1 gap-4 xl:grid-cols-[380px,minmax(0,1fr)] xl:items-start min-h-0">
+          <aside className="order-2 min-h-0 xl:order-1 xl:sticky xl:top-4 self-start">
+            <div className="space-y-4">
+              <TranscriptPanel
+                connectionState={connectionState}
+                isMockStream={isMockStream}
+                currentTooth={currentTooth}
+                currentSurface={currentSurface}
+                activeSiteIndex={activeSiteIndex}
+                transcripts={transcripts}
+              />
+
+              <StatusBar
+                connectionState={connectionState}
+                latencyMs={latencyMs}
+                socketUrl={socketUrl}
+                lastPayload={lastPayload}
+                isMockStream={isMockStream}
+              />
+            </div>
           </aside>
 
-          <section className="min-h-0 self-start">
-            <div className="panel-surface h-full rounded-[32px] p-4 sm:p-5">
+          <section className="order-1 min-w-0 min-h-0 xl:order-2">
+            <div className="panel-surface rounded-[32px] p-4 sm:p-5">
               <PerioChart
                 teeth={teeth}
                 activeTooth={currentTooth}
@@ -76,16 +86,6 @@ function Dashboard() {
             </div>
           </section>
         </main>
-
-        <footer>
-          <StatusBar
-            connectionState={connectionState}
-            latencyMs={latencyMs}
-            socketUrl={socketUrl}
-            lastPayload={lastPayload}
-            isMockStream={isMockStream}
-          />
-        </footer>
       </div>
     </div>
   );

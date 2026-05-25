@@ -4,9 +4,9 @@
 
 :root {
   color-scheme: light;
-  --perio-bg-start: #f7fbff;
-  --perio-bg-end: #eef4fb;
-  --perio-panel: rgba(255, 255, 255, 0.88);
+  --perio-bg-start: #f8fbff;
+  --perio-bg-end: #edf4fb;
+  --perio-panel: rgba(255, 255, 255, 0.9);
   --perio-border: rgba(148, 163, 184, 0.22);
   --perio-ink: #0f172a;
 }
@@ -19,7 +19,7 @@ body,
 
 body {
   margin: 0;
-  font-family: "Aptos", "Segoe UI", "Helvetica Neue", sans-serif;
+  font-family: "Aptos", "Segoe UI Variable", "Helvetica Neue", sans-serif;
   color: var(--perio-ink);
   background:
     radial-gradient(circle at top left, rgba(14, 165, 233, 0.18), transparent 36%),
@@ -27,6 +27,7 @@ body {
     linear-gradient(180deg, var(--perio-bg-start), var(--perio-bg-end));
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  overflow-x: hidden;
 }
 
 * {
@@ -62,24 +63,6 @@ body {
   backdrop-filter: blur(18px);
 }
 
-.chart-scrollbar::-webkit-scrollbar {
-  height: 10px;
-}
-
-.chart-scrollbar::-webkit-scrollbar-track {
-  background: rgba(226, 232, 240, 0.6);
-  border-radius: 999px;
-}
-
-.chart-scrollbar::-webkit-scrollbar-thumb {
-  background: rgba(100, 116, 139, 0.35);
-  border-radius: 999px;
-}
-
-.chart-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: rgba(71, 85, 105, 0.5);
-}
-
 .chart-pop {
   animation: chart-pop 180ms ease-out;
 }
@@ -113,4 +96,12 @@ body {
 
 .debug-json {
   font-family: "Cascadia Code", "SFMono-Regular", Consolas, monospace;
+}
+
+.site-chip {
+  transition: transform 150ms ease, fill 150ms ease, stroke 150ms ease;
+}
+
+.site-chip-active {
+  filter: drop-shadow(0 0 10px rgba(14, 165, 233, 0.24));
 }

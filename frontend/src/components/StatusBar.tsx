@@ -28,12 +28,12 @@ export function StatusBar({ connectionState, latencyMs, socketUrl, lastPayload, 
   const debugPayload = lastPayload ? JSON.stringify(lastPayload, null, 2) : 'No JSON payload received yet.';
 
   return (
-    <div className="grid gap-4 xl:grid-cols-[340px,minmax(0,1fr)] xl:items-stretch">
-      <section className="rounded-[28px] border border-slate-200/80 bg-white/80 p-5 shadow-[0_12px_32px_rgba(15,23,42,0.05)]">
+    <div className="grid gap-4 xl:grid-cols-1 xl:items-stretch">
+      <section className="rounded-[28px] border border-slate-200/80 bg-white/88 p-5 shadow-[0_12px_32px_rgba(15,23,42,0.05)] backdrop-blur">
         <div className="flex items-center justify-between gap-3">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.28em] text-slate-500">Connection</p>
-            <h3 className="mt-2 text-lg font-semibold text-slate-900">Live socket health</h3>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.32em] text-slate-500">Connection</p>
+            <h3 className="mt-2 text-[20px] font-semibold tracking-tight text-slate-950">Live socket health</h3>
           </div>
           <span className={`rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.24em] ${statusTone(connectionState)}`}>
             {connectionState}
@@ -58,11 +58,11 @@ export function StatusBar({ connectionState, latencyMs, socketUrl, lastPayload, 
         </div>
       </section>
 
-      <section className="rounded-[28px] border border-slate-200/80 bg-white/80 p-5 shadow-[0_12px_32px_rgba(15,23,42,0.05)]">
+      <section className="rounded-[28px] border border-slate-200/80 bg-white/88 p-5 shadow-[0_12px_32px_rgba(15,23,42,0.05)] backdrop-blur">
         <div className="flex items-center justify-between gap-3">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.28em] text-slate-500">JSON debug panel</p>
-            <h3 className="mt-2 text-lg font-semibold text-slate-900">Latest incoming payload</h3>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.32em] text-slate-500">JSON debug panel</p>
+            <h3 className="mt-2 text-[20px] font-semibold tracking-tight text-slate-950">Latest incoming payload</h3>
           </div>
           <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-500">
             live

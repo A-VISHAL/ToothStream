@@ -32,11 +32,11 @@ export function TranscriptPanel({
 
   return (
     <div className="flex h-full flex-col gap-4">
-      <div className="rounded-[28px] border border-slate-200/80 bg-white/80 p-5 shadow-[0_12px_32px_rgba(15,23,42,0.05)]">
+      <div className="rounded-[28px] border border-slate-200/80 bg-white/88 p-5 shadow-[0_12px_32px_rgba(15,23,42,0.05)] backdrop-blur">
         <div className="flex items-center justify-between gap-3">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.28em] text-slate-500">Live transcript</p>
-            <h2 className="mt-2 text-xl font-semibold text-slate-900">Charting stream</h2>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.32em] text-slate-500">Live transcript</p>
+            <h2 className="mt-2 text-[22px] font-semibold tracking-tight text-slate-950">Charting stream</h2>
           </div>
           <span
             className={`rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-[0.24em] ${
@@ -54,12 +54,12 @@ export function TranscriptPanel({
         <div className="mt-5 grid gap-3">
           <div className="rounded-2xl border border-slate-200 bg-slate-50/90 p-4">
             <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-slate-400">Current tooth</p>
-            <p className="mt-2 text-2xl font-semibold text-slate-900">{currentTooth ?? '—'}</p>
+            <p className="mt-2 text-[28px] font-semibold leading-none text-slate-950">{currentTooth ?? '—'}</p>
           </div>
 
           <div className="rounded-2xl border border-slate-200 bg-slate-50/90 p-4">
             <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-slate-400">Current surface</p>
-            <p className="mt-2 text-lg font-semibold text-slate-900">{surfaceLabel(currentSurface)}</p>
+            <p className="mt-2 text-base font-semibold text-slate-950">{surfaceLabel(currentSurface)}</p>
             <p className="mt-1 text-sm text-slate-500">Active site: {currentSite}</p>
           </div>
 
@@ -72,11 +72,11 @@ export function TranscriptPanel({
         </div>
       </div>
 
-      <div className="flex-1 rounded-[28px] border border-slate-200/80 bg-white/80 p-5 shadow-[0_12px_32px_rgba(15,23,42,0.05)]">
+      <div className="flex-1 rounded-[28px] border border-slate-200/80 bg-white/88 p-5 shadow-[0_12px_32px_rgba(15,23,42,0.05)] backdrop-blur">
         <div className="flex items-center justify-between gap-3">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.28em] text-slate-500">Transcript history</p>
-            <h3 className="mt-2 text-lg font-semibold text-slate-900">Latest chart commands</h3>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.32em] text-slate-500">Transcript history</p>
+            <h3 className="mt-2 text-[20px] font-semibold tracking-tight text-slate-950">Latest chart commands</h3>
           </div>
           <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold uppercase tracking-[0.22em] text-slate-600">
             {transcripts.length} entries
