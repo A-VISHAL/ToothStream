@@ -1,7 +1,7 @@
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { getMockPayload, getMockTranscriptIntro } from '../data/mockStream';
+import React, { createContext, useEffect, useMemo, useRef, useState } from 'react';
+import { parseTranscriptToPayload } from './transcriptParser';
+import { useDeepgramTranscription } from './useDeepgramTranscription';
 import type {
-  ConnectionState,
   PerioChartContextValue,
   PerioPayload,
   ToothState,
@@ -10,9 +10,7 @@ import type {
   TranscriptEntry,
 } from '../types';
 
-const DEFAULT_SOCKET_URL = 'ws://localhost:8000/ws';
 const SITE_COUNT = 3;
-const MOCK_INTERVAL_MS = 1800;
 
 const PerioChartContext = createContext<PerioChartContextValue | undefined>(undefined);
 
@@ -60,28 +58,6 @@ function clampSiteIndex(value?: number): number {
   return Math.max(0, Math.min(SITE_COUNT - 1, Math.trunc(value)));
 }
 
-function createTranscriptText(payload: PerioPayload): string {
-  if (payload.transcript?.trim()) {
-    return payload.transcript.trim();
-  }
-
-  if (payload.tooth && payload.depth) {
-    const values = payload.depth.join(' | ');
-    const surface = normalizeSurface(payload.surface) === 'buccal' ? 'buccal' : 'lingual / palatal';
-    return `Tooth ${payload.tooth} ${surface}: ${values}${payload.bleeding ? ' with bleeding' : ''}.`;
-  }
-
-  if (payload.tooth && payload.missing) {
-    return `Tooth ${payload.tooth} marked missing.`;
-  }
-
-  if (payload.tooth && payload.implant) {
-    return `Tooth ${payload.tooth} marked as implant.`;
-  }
-
-  return 'Chart update received.';
-}
-
 function hydratePayload(payload: PerioPayload): PerioPayload {
   return {
     ...payload,
@@ -93,11 +69,8 @@ function hydratePayload(payload: PerioPayload): PerioPayload {
 
 function ingestPayload(
   payload: PerioPayload,
-  source: 'socket' | 'mock',
   setTeeth: React.Dispatch<React.SetStateAction<Record<number, ToothState>>>,
   setTranscriptEntries: React.Dispatch<React.SetStateAction<TranscriptEntry[]>>,
-  setConnectionState: React.Dispatch<React.SetStateAction<ConnectionState>>,
-  setIsMockStream: React.Dispatch<React.SetStateAction<boolean>>,
   setLatencyMs: React.Dispatch<React.SetStateAction<number | null>>,
   setLastPayload: React.Dispatch<React.SetStateAction<PerioPayload | null>>,
   setCurrentTooth: React.Dispatch<React.SetStateAction<number | null>>,
@@ -108,8 +81,6 @@ function ingestPayload(
   const receivedAt = Date.now();
   const payloadTimestamp = hydrated.timestamp ?? receivedAt;
 
-  setConnectionState(source === 'mock' ? 'mock' : 'connected');
-  setIsMockStream(source === 'mock');
   setLatencyMs(Math.max(0, receivedAt - payloadTimestamp));
   setLastPayload(hydrated);
 
@@ -171,10 +142,11 @@ function ingestPayload(
 
   setTranscriptEntries((previous) => {
     const nextEntry: TranscriptEntry = {
-      id: `${source}-${receivedAt}-${Math.random().toString(36).slice(2, 8)}`,
-      text: createTranscriptText(hydrated),
+      id: `socket-${receivedAt}-${Math.random().toString(36).slice(2, 8)}`,
+      text: hydrated.transcript?.trim() || 'Chart update received.',
       timestamp: receivedAt,
-      source,
+      source: 'socket',
+      isFinal: true,
     };
 
     return [nextEntry, ...previous].slice(0, 8);
@@ -182,205 +154,48 @@ function ingestPayload(
 }
 
 export function WebSocketProvider({ children }: { children: React.ReactNode }) {
-  const [connectionState, setConnectionState] = useState<ConnectionState>('connecting');
-  const [isMockStream, setIsMockStream] = useState(false);
-  const [socketUrl] = useState(process.env.REACT_APP_WEBSOCKET_URL || DEFAULT_SOCKET_URL);
+  const transcription = useDeepgramTranscription();
+  const [connectionState, setConnectionState] = useState<PerioChartContextValue['connectionState']>('disconnected');
+  const [socketUrl] = useState(transcription.socketUrl);
   const [latencyMs, setLatencyMs] = useState<number | null>(null);
   const [lastPayload, setLastPayload] = useState<PerioPayload | null>(null);
   const [currentTooth, setCurrentTooth] = useState<number | null>(null);
   const [currentSurface, setCurrentSurface] = useState<ToothSurface | null>(null);
   const [activeSiteIndex, setActiveSiteIndex] = useState<number | null>(null);
-  const [transcripts, setTranscriptEntries] = useState<TranscriptEntry[]>([
-    {
-      id: 'intro',
-      text: getMockTranscriptIntro(),
-      timestamp: Date.now(),
-      source: 'mock',
-    },
-  ]);
+  const [transcripts, setTranscriptEntries] = useState<TranscriptEntry[]>([]);
   const [teeth, setTeeth] = useState<Record<number, ToothState>>(createInitialTeethState);
+  const processedTranscriptIdsRef = useRef<Set<string>>(new Set());
 
-  const socketRef = useRef<WebSocket | null>(null);
-  const mockTimerRef = useRef<number | null>(null);
-  const mockIndexRef = useRef(0);
-  const connectionAttemptRef = useRef(0);
-  const mockActiveRef = useRef(false);
+  useEffect(() => {
+    setConnectionState(transcription.connectionState);
+  }, [transcription.connectionState]);
 
-  const stopMockStream = useCallback(() => {
-    if (mockTimerRef.current !== null) {
-      window.clearInterval(mockTimerRef.current);
-      mockTimerRef.current = null;
+  useEffect(() => {
+    if (transcription.segments.length === 0 && !transcription.isRecording) {
+      processedTranscriptIdsRef.current = new Set();
     }
-  }, []);
+  }, [transcription.isRecording, transcription.segments.length]);
 
-  const startMockStream = useCallback(() => {
-    if (mockActiveRef.current) {
+  useEffect(() => {
+    const latestFinal = transcription.segments.find((segment) => segment.isFinal && !processedTranscriptIdsRef.current.has(segment.id));
+
+    if (!latestFinal) {
       return;
     }
 
-    mockActiveRef.current = true;
-    stopMockStream();
+    processedTranscriptIdsRef.current.add(latestFinal.id);
 
-    if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
-      socketRef.current.close();
+    const payload = parseTranscriptToPayload(latestFinal.text);
+    if (!payload) {
+      return;
     }
 
-    setConnectionState('mock');
-    setIsMockStream(true);
-
-    const sendMockPayload = () => {
-      const payload = getMockPayload(mockIndexRef.current);
-      mockIndexRef.current += 1;
-      ingestPayload(
-        payload,
-        'mock',
-        setTeeth,
-        setTranscriptEntries,
-        setConnectionState,
-        setIsMockStream,
-        setLatencyMs,
-        setLastPayload,
-        setCurrentTooth,
-        setCurrentSurface,
-        setActiveSiteIndex
-      );
-    };
-
-    sendMockPayload();
-    mockTimerRef.current = window.setInterval(sendMockPayload, MOCK_INTERVAL_MS);
-  }, [stopMockStream]);
-
-  useEffect(() => {
-    connectionAttemptRef.current += 1;
-    const attemptId = connectionAttemptRef.current;
-
-    const forceMock = process.env.REACT_APP_PERIO_USE_MOCK === 'true';
-    if (forceMock) {
-      startMockStream();
-      return undefined;
-    }
-
-    let connected = false;
-    let timeoutId: number | null = window.setTimeout(() => {
-      if (!connected) {
-        startMockStream();
-      }
-    }, 1200);
-
-    try {
-      const socket = new WebSocket(socketUrl);
-      socketRef.current = socket;
-
-      socket.onopen = () => {
-        if (attemptId !== connectionAttemptRef.current) {
-          return;
-        }
-
-        connected = true;
-        if (timeoutId !== null) {
-          window.clearTimeout(timeoutId);
-          timeoutId = null;
-        }
-
-        mockActiveRef.current = false;
-        stopMockStream();
-        setConnectionState('connected');
-        setIsMockStream(false);
-      };
-
-      socket.onmessage = (event) => {
-        if (attemptId !== connectionAttemptRef.current) {
-          return;
-        }
-
-        let payload: PerioPayload;
-
-        try {
-          payload = JSON.parse(event.data) as PerioPayload;
-        } catch {
-          payload = { transcript: String(event.data), timestamp: Date.now() };
-        }
-
-        ingestPayload(
-          payload,
-          'socket',
-          setTeeth,
-          setTranscriptEntries,
-          setConnectionState,
-          setIsMockStream,
-          setLatencyMs,
-          setLastPayload,
-          setCurrentTooth,
-          setCurrentSurface,
-          setActiveSiteIndex
-        );
-      };
-
-      socket.onerror = () => {
-        if (attemptId !== connectionAttemptRef.current) {
-          return;
-        }
-
-        if (!connected) {
-          startMockStream();
-        } else {
-          setConnectionState('error');
-        }
-      };
-
-      socket.onclose = () => {
-        if (attemptId !== connectionAttemptRef.current) {
-          return;
-        }
-
-        if (timeoutId !== null) {
-          window.clearTimeout(timeoutId);
-          timeoutId = null;
-        }
-
-        if (!connected) {
-          startMockStream();
-          return;
-        }
-
-        setConnectionState('disconnected');
-        startMockStream();
-      };
-    } catch {
-      startMockStream();
-    }
-
-    return () => {
-      connectionAttemptRef.current += 1;
-      if (timeoutId !== null) {
-        window.clearTimeout(timeoutId);
-      }
-
-      stopMockStream();
-      mockActiveRef.current = false;
-
-      if (socketRef.current) {
-        socketRef.current.onopen = null;
-        socketRef.current.onmessage = null;
-        socketRef.current.onerror = null;
-        socketRef.current.onclose = null;
-
-        if (
-          socketRef.current.readyState === WebSocket.CONNECTING ||
-          socketRef.current.readyState === WebSocket.OPEN
-        ) {
-          socketRef.current.close();
-        }
-
-        socketRef.current = null;
-      }
-    };
-  }, [socketUrl, startMockStream, stopMockStream]);
+    ingestPayload(payload, setTeeth, setTranscriptEntries, setLatencyMs, setLastPayload, setCurrentTooth, setCurrentSurface, setActiveSiteIndex);
+  }, [setTeeth, transcription.segments]);
 
   const value = useMemo<PerioChartContextValue>(
     () => ({
       connectionState,
-      isMockStream,
       socketUrl,
       latencyMs,
       lastPayload,
@@ -388,6 +203,11 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
       currentSurface,
       activeSiteIndex,
       transcripts,
+      interimTranscript: transcription.interimTranscript,
+      isRecording: transcription.isRecording,
+      transcriptionError: transcription.error,
+      startRecording: transcription.startRecording,
+      stopRecording: transcription.stopRecording,
       teeth,
     }),
     [
@@ -395,12 +215,16 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
       connectionState,
       currentSurface,
       currentTooth,
-      isMockStream,
       lastPayload,
       latencyMs,
       socketUrl,
       teeth,
       transcripts,
+      transcription.error,
+      transcription.interimTranscript,
+      transcription.isRecording,
+      transcription.startRecording,
+      transcription.stopRecording,
     ]
   );
 
@@ -408,7 +232,7 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
 }
 
 export function usePerioChart() {
-  const context = useContext(PerioChartContext);
+  const context = React.useContext(PerioChartContext);
 
   if (!context) {
     throw new Error('usePerioChart must be used within a WebSocketProvider.');

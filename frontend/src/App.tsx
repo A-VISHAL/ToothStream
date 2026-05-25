@@ -8,7 +8,6 @@ import { WebSocketProvider, usePerioChart } from './components/WebSocketProvider
 function Dashboard() {
   const {
     connectionState,
-    isMockStream,
     latencyMs,
     socketUrl,
     lastPayload,
@@ -29,24 +28,30 @@ function Dashboard() {
                 Real-time periodontal charting workspace
               </h1>
               <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600 sm:text-[15px]">
-                Clinical-style charting surface with live tooth updates, SVG rendering, websocket connectivity, and a mock fallback for local testing.
+                Clinical-style charting surface with live tooth updates, SVG rendering, websocket connectivity, and real Deepgram speech-to-text.
               </p>
             </div>
 
             <div className="flex flex-wrap items-center gap-3 text-sm">
               <span
                 className={`rounded-full border px-3 py-2 font-semibold uppercase tracking-[0.24em] ${
-                  connectionState === 'connected'
+                  connectionState === 'connected' || connectionState === 'listening'
                     ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-                    : connectionState === 'mock'
-                      ? 'border-cyan-200 bg-cyan-50 text-cyan-800'
+                    : connectionState === 'reconnecting'
+                      ? 'border-amber-200 bg-amber-50 text-amber-700'
+                      : connectionState === 'connecting'
+                        ? 'border-cyan-200 bg-cyan-50 text-cyan-800'
                       : 'border-slate-200 bg-slate-50 text-slate-600'
                 }`}
               >
                 {connectionState}
               </span>
               <span className="rounded-full border border-slate-200 bg-white px-3 py-2 font-medium text-slate-700 shadow-sm">
-                {isMockStream ? 'Mock data ready' : 'Backend socket live'}
+                {connectionState === 'connected' || connectionState === 'listening'
+                  ? 'Connected to Deepgram'
+                  : connectionState === 'reconnecting'
+                    ? 'Reconnecting'
+                    : 'Backend disconnected'}
               </span>
             </div>
           </div>
@@ -55,20 +60,13 @@ function Dashboard() {
         <main className="grid flex-1 gap-4 xl:grid-cols-[380px,minmax(0,1fr)] xl:items-start min-h-0">
           <aside className="order-2 min-h-0 xl:order-1 xl:sticky xl:top-4 self-start">
             <div className="space-y-4">
-              <TranscriptPanel
-                connectionState={connectionState}
-                isMockStream={isMockStream}
-                currentTooth={currentTooth}
-                currentSurface={currentSurface}
-                activeSiteIndex={activeSiteIndex}
-              />
+              <TranscriptPanel />
 
               <StatusBar
                 connectionState={connectionState}
                 latencyMs={latencyMs}
                 socketUrl={socketUrl}
                 lastPayload={lastPayload}
-                isMockStream={isMockStream}
               />
             </div>
           </aside>

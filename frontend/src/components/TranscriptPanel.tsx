@@ -1,14 +1,6 @@
 import React from 'react';
-import type { ConnectionState, ToothSurface } from '../types';
-import { useDeepgramTranscription } from './useDeepgramTranscription';
-
-interface TranscriptPanelProps {
-  connectionState: ConnectionState;
-  isMockStream: boolean;
-  currentTooth: number | null;
-  currentSurface: ToothSurface | null;
-  activeSiteIndex: number | null;
-}
+import { usePerioChart } from './WebSocketProvider';
+import type { ToothSurface } from '../types';
 
 const SITE_NAMES = ['Mesial', 'Mid', 'Distal'];
 
@@ -20,33 +12,44 @@ function surfaceLabel(surface: ToothSurface | null): string {
   return surface === 'buccal' ? 'Buccal' : 'Lingual / Palatal';
 }
 
-export function TranscriptPanel({
-  connectionState,
-  isMockStream,
-  currentTooth,
-  currentSurface,
-  activeSiteIndex,
-}: TranscriptPanelProps) {
-  const { connectionState: micState, error, interimTranscript, isRecording, segments, socketUrl, startRecording, stopRecording } =
-    useDeepgramTranscription();
+export function TranscriptPanel() {
+  const {
+    connectionState,
+    currentTooth,
+    currentSurface,
+    activeSiteIndex,
+    transcripts,
+    interimTranscript,
+    isRecording,
+    transcriptionError,
+    socketUrl,
+    startRecording,
+    stopRecording,
+  } = usePerioChart();
 
   const currentSite = activeSiteIndex !== null ? SITE_NAMES[activeSiteIndex] : 'Mid';
 
   const micBadge =
-    micState === 'listening'
+    connectionState === 'listening'
       ? 'Listening'
-      : micState === 'connected'
-        ? 'Connected'
-        : 'Disconnected';
+      : connectionState === 'connected'
+        ? 'Connected to Deepgram'
+        : connectionState === 'reconnecting'
+          ? 'Reconnecting'
+          : connectionState === 'connecting'
+            ? 'Connecting'
+            : 'Disconnected';
 
   const micBadgeTone =
-    micState === 'listening'
+    connectionState === 'listening'
       ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-      : micState === 'connected'
+      : connectionState === 'connected'
         ? 'border-cyan-200 bg-cyan-50 text-cyan-800'
-        : micState === 'error'
-          ? 'border-rose-200 bg-rose-50 text-rose-700'
-          : 'border-slate-200 bg-slate-50 text-slate-600';
+        : connectionState === 'reconnecting'
+          ? 'border-amber-200 bg-amber-50 text-amber-700'
+          : connectionState === 'error'
+            ? 'border-rose-200 bg-rose-50 text-rose-700'
+            : 'border-slate-200 bg-slate-50 text-slate-600';
 
   return (
     <div className="flex h-full flex-col gap-4">
@@ -102,11 +105,23 @@ export function TranscriptPanel({
           <div className="rounded-2xl border border-slate-200 bg-slate-50/90 p-4">
             <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-slate-400">Stream mode</p>
             <p className="mt-2 text-sm font-medium text-slate-700">
-              {isMockStream ? 'Local mock data is feeding the chart.' : 'Connected to the live FastAPI WebSocket.'}
+              {connectionState === 'connected' || connectionState === 'listening'
+                ? 'Connected to the live FastAPI WebSocket.'
+                : connectionState === 'reconnecting'
+                  ? 'Reconnecting to the backend and Deepgram.'
+                  : 'Waiting for microphone and backend connection.'}
             </p>
           </div>
 
-          {error ? <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">{error}</div> : null}
+          <div className="rounded-2xl border border-slate-200 bg-slate-50/90 p-4">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-slate-400">System status</p>
+            <p className="mt-2 text-sm font-medium text-slate-700">
+              {isRecording ? 'Listening for speech.' : 'Waiting for microphone.'}
+            </p>
+            <p className="mt-1 text-sm text-slate-500">
+              {transcriptionError || (connectionState === 'connected' || connectionState === 'listening' ? 'Backend connected.' : 'Backend disconnected.')}
+            </p>
+          </div>
         </div>
       </div>
 
@@ -117,7 +132,7 @@ export function TranscriptPanel({
             <h3 className="mt-2 text-[20px] font-semibold tracking-tight text-slate-950">Deepgram live output</h3>
           </div>
           <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold uppercase tracking-[0.22em] text-slate-600">
-            {segments.length} final
+            {transcripts.length} final
           </span>
         </div>
 
@@ -129,26 +144,28 @@ export function TranscriptPanel({
         </div>
 
         <div className="mt-4 max-h-[320px] space-y-3 overflow-y-auto pr-1">
-          {segments.length > 0 ? segments.map((entry) => (
-            <article
-              key={entry.id}
-              className="rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm transition hover:border-cyan-200 hover:bg-cyan-50/50"
-            >
-              <div className="flex items-center justify-between gap-3">
-                <span className="text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-400">
-                  {entry.isFinal ? 'Final' : 'Interim'}
-                </span>
-                <span className="text-[11px] font-medium text-slate-500">
-                  {new Date(entry.timestamp).toLocaleTimeString([], {
-                    hour: '2-digit',
-                    minute: '2-digit',
-                    second: '2-digit',
-                  })}
-                </span>
-              </div>
-              <p className="mt-2 text-sm leading-6 text-slate-700">{entry.text}</p>
-            </article>
-          )) : (
+          {transcripts.length > 0 ? (
+            transcripts.map((entry) => (
+              <article
+                key={entry.id}
+                className="rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm transition hover:border-cyan-200 hover:bg-cyan-50/50"
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-400">
+                    {entry.isFinal ? 'Final' : 'Interim'}
+                  </span>
+                  <span className="text-[11px] font-medium text-slate-500">
+                    {new Date(entry.timestamp).toLocaleTimeString([], {
+                      hour: '2-digit',
+                      minute: '2-digit',
+                      second: '2-digit',
+                    })}
+                  </span>
+                </div>
+                <p className="mt-2 text-sm leading-6 text-slate-700">{entry.text}</p>
+              </article>
+            ))
+          ) : (
             <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-sm text-slate-500">
               Final transcript segments will appear here.
             </div>

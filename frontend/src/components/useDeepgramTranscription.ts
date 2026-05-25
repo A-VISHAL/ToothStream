@@ -180,7 +180,7 @@ export function useDeepgramTranscription() {
           }
 
           if (payload.state === 'reconnecting') {
-            setConnectionState('disconnected');
+            setConnectionState('reconnecting');
           }
 
           return;
@@ -218,7 +218,7 @@ export function useDeepgramTranscription() {
           return;
         }
 
-        setConnectionState('disconnected');
+        setConnectionState(shouldReconnectRef.current ? 'reconnecting' : 'disconnected');
 
         if (shouldReconnectRef.current) {
           reconnectTimerRef.current = window.setTimeout(() => {

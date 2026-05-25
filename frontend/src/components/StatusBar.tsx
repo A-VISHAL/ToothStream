@@ -6,25 +6,42 @@ interface StatusBarProps {
   latencyMs: number | null;
   socketUrl: string;
   lastPayload: PerioPayload | null;
-  isMockStream: boolean;
 }
 
 function statusTone(state: ConnectionState): string {
   switch (state) {
     case 'connected':
+    case 'listening':
       return 'border-emerald-200 bg-emerald-50 text-emerald-700';
-    case 'mock':
-      return 'border-cyan-200 bg-cyan-50 text-cyan-800';
+    case 'reconnecting':
+      return 'border-amber-200 bg-amber-50 text-amber-700';
     case 'error':
       return 'border-rose-200 bg-rose-50 text-rose-700';
     case 'disconnected':
       return 'border-slate-200 bg-slate-50 text-slate-600';
     default:
-      return 'border-amber-200 bg-amber-50 text-amber-700';
+      return 'border-cyan-200 bg-cyan-50 text-cyan-800';
   }
 }
 
-export function StatusBar({ connectionState, latencyMs, socketUrl, lastPayload, isMockStream }: StatusBarProps) {
+function statusLabel(state: ConnectionState): string {
+  switch (state) {
+    case 'connected':
+      return 'Connected to Deepgram';
+    case 'listening':
+      return 'Listening';
+    case 'reconnecting':
+      return 'Reconnecting';
+    case 'error':
+      return 'Error';
+    case 'disconnected':
+      return 'Backend disconnected';
+    default:
+      return 'Connecting';
+  }
+}
+
+export function StatusBar({ connectionState, latencyMs, socketUrl, lastPayload }: StatusBarProps) {
   const debugPayload = lastPayload ? JSON.stringify(lastPayload, null, 2) : 'No JSON payload received yet.';
 
   return (
@@ -36,7 +53,7 @@ export function StatusBar({ connectionState, latencyMs, socketUrl, lastPayload, 
             <h3 className="mt-2 text-[20px] font-semibold tracking-tight text-slate-950">Live socket health</h3>
           </div>
           <span className={`rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.24em] ${statusTone(connectionState)}`}>
-            {connectionState}
+            {statusLabel(connectionState)}
           </span>
         </div>
 
@@ -53,7 +70,13 @@ export function StatusBar({ connectionState, latencyMs, socketUrl, lastPayload, 
 
           <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
             <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-400">Mode</p>
-            <p className="mt-2 font-medium text-slate-800">{isMockStream ? 'Mock stream active' : 'FastAPI WebSocket active'}</p>
+            <p className="mt-2 font-medium text-slate-800">
+              {connectionState === 'connected' || connectionState === 'listening'
+                ? 'FastAPI WebSocket active'
+                : connectionState === 'reconnecting'
+                  ? 'Reconnecting to backend'
+                  : 'Backend disconnected'}
+            </p>
           </div>
         </div>
       </section>
