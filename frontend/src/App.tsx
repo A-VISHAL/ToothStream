@@ -15,7 +15,6 @@ function Dashboard() {
     currentTooth,
     currentSurface,
     activeSiteIndex,
-    transcripts,
     teeth,
   } = usePerioChart();
 
@@ -62,7 +61,6 @@ function Dashboard() {
                 currentTooth={currentTooth}
                 currentSurface={currentSurface}
                 activeSiteIndex={activeSiteIndex}
-                transcripts={transcripts}
               />
 
               <StatusBar

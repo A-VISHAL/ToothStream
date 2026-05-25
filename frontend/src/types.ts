@@ -35,8 +35,11 @@ export interface TranscriptEntry {
   id: string;
   text: string;
   timestamp: number;
-  source: 'socket' | 'mock';
+  source: 'socket' | 'mock' | 'deepgram';
+  isFinal?: boolean;
 }
+
+export type LiveTranscriptState = 'disconnected' | 'connecting' | 'connected' | 'listening' | 'error';
 
 export interface PerioChartContextValue {
   connectionState: ConnectionState;
