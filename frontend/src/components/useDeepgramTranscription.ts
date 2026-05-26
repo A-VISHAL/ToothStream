@@ -14,6 +14,7 @@ type TranscriptMessage = {
   speech_final?: boolean;
   message?: string;
   state?: string;
+  details?: string;
 };
 
 type ResampleState = {
@@ -28,7 +29,26 @@ function createAudioContext(): AudioContext {
     throw new Error('AudioContext is not supported in this browser.');
   }
 
-  return new AudioContextConstructor();
+  try {
+    return new AudioContextConstructor({ sampleRate: TARGET_SAMPLE_RATE });
+  } catch {
+    return new AudioContextConstructor();
+  }
+}
+
+function createOfflineAudioContext(frameCount: number): OfflineAudioContext | null {
+  const OfflineAudioContextConstructor =
+    window.OfflineAudioContext || (window as Window & { webkitOfflineAudioContext?: typeof OfflineAudioContext }).webkitOfflineAudioContext;
+
+  if (!OfflineAudioContextConstructor) {
+    return null;
+  }
+
+  try {
+    return new OfflineAudioContextConstructor(1, Math.max(1, frameCount), TARGET_SAMPLE_RATE);
+  } catch {
+    return null;
+  }
 }
 
 function resampleBuffer(input: Float32Array, inputSampleRate: number, outputSampleRate: number, state: ResampleState): Float32Array {
@@ -75,6 +95,30 @@ function floatTo16BitPCM(buffer: Float32Array): ArrayBuffer {
   return output.buffer;
 }
 
+async function resampleToTargetRate(input: Float32Array, inputSampleRate: number): Promise<Float32Array> {
+  if (inputSampleRate === TARGET_SAMPLE_RATE) {
+    return input;
+  }
+
+  const estimatedFrameCount = Math.max(1, Math.ceil((input.length * TARGET_SAMPLE_RATE) / inputSampleRate));
+  const offlineContext = createOfflineAudioContext(estimatedFrameCount);
+
+  if (!offlineContext) {
+    return input;
+  }
+
+  const sourceBuffer = offlineContext.createBuffer(1, input.length, inputSampleRate);
+  sourceBuffer.copyToChannel(input, 0);
+
+  const source = offlineContext.createBufferSource();
+  source.buffer = sourceBuffer;
+  source.connect(offlineContext.destination);
+  source.start(0);
+
+  const rendered = await offlineContext.startRendering();
+  return rendered.getChannelData(0).slice();
+}
+
 export function useDeepgramTranscription() {
   const [connectionState, setConnectionState] = useState<LiveTranscriptState>('disconnected');
   const [isRecording, setIsRecording] = useState(false);
@@ -94,6 +138,8 @@ export function useDeepgramTranscription() {
   const pendingChunksRef = useRef<ArrayBuffer[]>([]);
   const lastFinalTranscriptRef = useRef('');
   const resampleStateRef = useRef<ResampleState>({ buffer: new Float32Array(0), position: 0 });
+  const audioChunkCountRef = useRef(0);
+  const chunkProcessingRef = useRef(Promise.resolve());
 
   const clearReconnectTimer = useCallback(() => {
     if (reconnectTimerRef.current !== null) {
@@ -115,6 +161,63 @@ export function useDeepgramTranscription() {
 
     pendingChunksRef.current = [];
   }, []);
+
+  const processAudioChunk = useCallback(
+    (input: Float32Array, inputSampleRate: number) => {
+      chunkProcessingRef.current = chunkProcessingRef.current
+        .then(async () => {
+          const downsampled = await resampleToTargetRate(input, inputSampleRate);
+          const pcmChunk = floatTo16BitPCM(downsampled);
+          const socket = socketRef.current;
+
+          audioChunkCountRef.current += 1;
+          const shouldLogChunk = audioChunkCountRef.current <= 5 || audioChunkCountRef.current % 25 === 0;
+
+          if (shouldLogChunk) {
+            console.info('[STT] PCM chunk ready:', {
+              chunk: audioChunkCountRef.current,
+              inputSampleRate,
+              outputSampleRate: TARGET_SAMPLE_RATE,
+              inputSamples: input.length,
+              outputBytes: pcmChunk.byteLength,
+            });
+          }
+
+          if (socket && socket.readyState === WebSocket.OPEN) {
+            if (shouldLogChunk) {
+              console.info('[STT] Sending audio chunk:', {
+                chunk: audioChunkCountRef.current,
+                outputBytes: pcmChunk.byteLength,
+              });
+            }
+
+            socket.send(pcmChunk);
+            setConnectionState('listening');
+            return;
+          }
+
+          if (shouldLogChunk) {
+            console.info('[STT] Buffering audio chunk until socket opens:', {
+              chunk: audioChunkCountRef.current,
+              outputBytes: pcmChunk.byteLength,
+              socketState: socket ? socket.readyState : 'none',
+            });
+          }
+
+          pendingChunksRef.current.push(pcmChunk);
+
+          if (pendingChunksRef.current.length > MAX_PENDING_CHUNKS) {
+            pendingChunksRef.current.shift();
+          }
+        })
+        .catch((chunkError) => {
+          console.error('[STT] Audio chunk processing failed:', chunkError);
+          setConnectionState('error');
+          setError(chunkError instanceof Error ? chunkError.message : 'Failed to encode microphone audio.');
+        });
+    },
+    []
+  );
 
   const pushSegment = useCallback((text: string) => {
     const transcript = text.trim();
@@ -150,12 +253,14 @@ export function useDeepgramTranscription() {
       socket.binaryType = 'arraybuffer';
       socketRef.current = socket;
       setConnectionState('connecting');
+      console.info('[STT] Opening transcription socket:', DEFAULT_TRANSCRIPTION_SOCKET_URL);
 
       socket.onopen = () => {
         if (isStoppingRef.current) {
           return;
         }
 
+        console.info('[STT] Transcription socket connected.');
         setError(null);
         setConnectionState('connected');
         flushPendingChunks();
@@ -187,30 +292,43 @@ export function useDeepgramTranscription() {
         }
 
         if (payload.type === 'error') {
-          setError(payload.message || 'Deepgram transcription error.');
-          setConnectionState('error');
+          const errorMessage = payload.details
+            ? `${payload.message || 'Deepgram transcription error.'} ${payload.details}`
+            : payload.message || 'Deepgram transcription error.';
+
+          console.error('[STT] Backend error:', errorMessage);
+          setError(errorMessage);
+          setConnectionState(payload.message?.includes('Reconnecting') ? 'reconnecting' : 'error');
           return;
         }
 
         if (payload.is_final || payload.speech_final) {
+          console.info('[STT] Final transcript received:', payload.transcript || '');
           pushSegment(payload.transcript || '');
           setInterimTranscript('');
           return;
         }
 
+        console.info('[STT] Interim transcript received:', payload.transcript || '');
         setInterimTranscript(payload.transcript || '');
       };
 
-      socket.onerror = () => {
+      socket.onerror = (event) => {
         if (isStoppingRef.current) {
           return;
         }
 
+        console.error('[STT] Transcription socket error:', event);
         setConnectionState('error');
         setError('Unable to connect to the transcription WebSocket.');
       };
 
-      socket.onclose = () => {
+      socket.onclose = (event) => {
+        console.warn('[STT] Transcription socket closed:', {
+          code: event.code,
+          reason: event.reason,
+          wasClean: event.wasClean,
+        });
         socketRef.current = null;
 
         if (isStoppingRef.current) {
@@ -231,6 +349,7 @@ export function useDeepgramTranscription() {
         }
       };
     } catch (socketError) {
+      console.error('[STT] Failed to open transcription socket:', socketError);
       setConnectionState('error');
       setError(socketError instanceof Error ? socketError.message : 'Failed to open the transcription WebSocket.');
     }
@@ -316,7 +435,10 @@ export function useDeepgramTranscription() {
     lastFinalTranscriptRef.current = '';
     pendingChunksRef.current = [];
     resampleStateRef.current = { buffer: new Float32Array(0), position: 0 };
+    audioChunkCountRef.current = 0;
+    chunkProcessingRef.current = Promise.resolve();
     setConnectionState('connecting');
+    console.info('[STT] Requesting microphone access.');
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
@@ -329,12 +451,15 @@ export function useDeepgramTranscription() {
       });
 
       mediaStreamRef.current = stream;
+      console.info('[STT] Microphone stream started.');
 
       const audioContext = createAudioContext();
       audioContextRef.current = audioContext;
       await audioContext.resume();
+      console.info('[STT] AudioContext resumed at sample rate:', audioContext.sampleRate);
 
       await audioContext.audioWorklet.addModule(WORKLET_URL);
+      console.info('[STT] Audio worklet loaded:', WORKLET_URL);
 
       const source = audioContext.createMediaStreamSource(stream);
       const worklet = new AudioWorkletNode(audioContext, WORKLET_NAME);
@@ -345,26 +470,13 @@ export function useDeepgramTranscription() {
       worklet.port.onmessage = (event: MessageEvent) => {
         const rawData = event.data as Float32Array | ArrayBuffer;
         const input = rawData instanceof Float32Array ? rawData : new Float32Array(rawData);
-        const downsampled = resampleBuffer(input, audioContext.sampleRate, TARGET_SAMPLE_RATE, resampleStateRef.current);
-        const pcmChunk = floatTo16BitPCM(downsampled);
-        const socket = socketRef.current;
-
-        if (socket && socket.readyState === WebSocket.OPEN) {
-          socket.send(pcmChunk);
-          setConnectionState('listening');
-          return;
-        }
-
-        pendingChunksRef.current.push(pcmChunk);
-
-        if (pendingChunksRef.current.length > MAX_PENDING_CHUNKS) {
-          pendingChunksRef.current.shift();
-        }
+        void processAudioChunk(input, audioContext.sampleRate);
       };
 
       source.connect(worklet);
       worklet.connect(silentGain);
       silentGain.connect(audioContext.destination);
+      console.info('[STT] Audio graph connected.');
 
       sourceRef.current = source;
       workletRef.current = worklet;
@@ -373,6 +485,7 @@ export function useDeepgramTranscription() {
       connectSocket();
       setIsRecording(true);
     } catch (captureError) {
+      console.error('[STT] Microphone capture setup failed:', captureError);
       await stopRecording();
       setConnectionState('error');
       setError(captureError instanceof Error ? captureError.message : 'Unable to access the microphone.');
