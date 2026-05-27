@@ -2,7 +2,7 @@
 
 This project is a real-time dental voice charting application using a Python FastAPI backend and a React frontend.
 
-## Project Structure
+## Project Structur
 
 ```
 perio-voice-ai/
