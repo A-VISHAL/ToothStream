@@ -11,8 +11,16 @@ export interface PerioPayload {
   implant?: boolean;
   siteIndex?: number;
   transcript?: string;
+  normalizedTranscript?: string;
   timestamp?: number;
   type?: string;
+}
+
+export type CommandFeedbackKind = 'bleeding' | 'undo' | 'jump' | 'info';
+
+export interface CommandFeedback {
+  message: string;
+  kind: CommandFeedbackKind;
 }
 
 export interface ToothSurfaceState {
@@ -53,6 +61,7 @@ export interface PerioChartContextValue {
   interimTranscript: string;
   isRecording: boolean;
   transcriptionError: string | null;
+  commandFeedback: CommandFeedback | null;
   startRecording: () => Promise<void>;
   stopRecording: () => Promise<void>;
   teeth: Record<number, ToothState>;

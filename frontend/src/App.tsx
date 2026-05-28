@@ -12,6 +12,7 @@ function Dashboard() {
     socketUrl,
     lastPayload,
     transcriptionError,
+    commandFeedback,
     currentTooth,
     currentSurface,
     activeSiteIndex,
@@ -20,6 +21,24 @@ function Dashboard() {
 
   return (
     <div className="app-shell relative px-4 py-4 sm:px-6 lg:px-8">
+      {commandFeedback ? (
+        <div className="command-toast fixed right-4 top-4 z-50 rounded-full border px-4 py-2 text-xs font-semibold uppercase tracking-[0.24em] text-slate-950 sm:right-6 sm:top-6">
+          <span
+            className={
+              commandFeedback.kind === 'undo'
+                ? 'border-amber-200 bg-amber-50 text-amber-800'
+                : commandFeedback.kind === 'bleeding'
+                  ? 'border-rose-200 bg-rose-50 text-rose-700'
+                  : commandFeedback.kind === 'jump'
+                    ? 'border-cyan-200 bg-cyan-50 text-cyan-800'
+                    : 'border-slate-200 bg-white text-slate-700'
+            }
+          >
+            {commandFeedback.message}
+          </span>
+        </div>
+      ) : null}
+
       <div className="relative mx-auto flex min-h-[calc(100vh-2rem)] max-w-[1800px] flex-col gap-4">
         <header className="panel-surface rounded-[32px] px-5 py-4 sm:px-6">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">

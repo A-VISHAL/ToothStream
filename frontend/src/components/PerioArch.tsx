@@ -16,14 +16,14 @@ interface PerioArchProps {
 }
 
 const ARCH_WIDTH = 1600;
-const ARCH_HEIGHT = 350;
+const ARCH_HEIGHT = 460;
 const START_X = 92;
 const END_X = 1508;
 const AMPLITUDE = 40;
 
 function archY(arch: ArchSide, t: number): number {
   const arc = Math.sin(Math.PI * t) * AMPLITUDE;
-  return arch === 'maxillary' ? 118 + arc : 232 - arc;
+  return arch === 'maxillary' ? 122 + arc : 286 - arc;
 }
 
 function archRotation(arch: ArchSide, t: number): number {
@@ -34,13 +34,13 @@ function archRotation(arch: ArchSide, t: number): number {
 function archGuidePath(arch: ArchSide): string {
   return arch === 'maxillary'
     ? 'M110 130C370 78 1230 78 1490 130'
-    : 'M110 222C370 274 1230 274 1490 222';
+    : 'M110 276C370 328 1230 328 1490 276';
 }
 
 function archBandPath(arch: ArchSide): string {
   return arch === 'maxillary'
     ? 'M140 100C390 44 1210 44 1460 100'
-    : 'M140 252C390 308 1210 308 1460 252';
+    : 'M140 306C390 362 1210 362 1460 306';
 }
 
 function sectionLabel(arch: ArchSide): string {
@@ -54,7 +54,7 @@ function BackgroundGuideLayer({ arch }: { arch: ArchSide }) {
   return (
     <g pointerEvents="none" opacity="0.72">
       <path
-        d={arch === 'maxillary' ? 'M100 120C360 72 1240 72 1500 120' : 'M100 230C360 278 1240 278 1500 230'}
+        d={arch === 'maxillary' ? 'M100 120C360 72 1240 72 1500 120' : 'M100 286C360 334 1240 334 1500 286'}
         fill="none"
         stroke={contourStroke}
         strokeWidth="2.1"
@@ -62,7 +62,7 @@ function BackgroundGuideLayer({ arch }: { arch: ArchSide }) {
         strokeDasharray="10 12"
       />
       <path
-        d={arch === 'maxillary' ? 'M128 108C390 58 1210 58 1472 108' : 'M128 242C390 292 1210 292 1472 242'}
+        d={arch === 'maxillary' ? 'M128 108C390 58 1210 58 1472 108' : 'M128 298C390 348 1210 348 1472 298'}
         fill="none"
         stroke={guideStroke}
         strokeWidth="1.2"
@@ -70,7 +70,7 @@ function BackgroundGuideLayer({ arch }: { arch: ArchSide }) {
         opacity="0.8"
       />
       <path
-        d={arch === 'maxillary' ? 'M108 138C360 112 1240 112 1492 138' : 'M108 212C360 238 1240 238 1492 212'}
+        d={arch === 'maxillary' ? 'M108 138C360 112 1240 112 1492 138' : 'M108 264C360 290 1240 290 1492 264'}
         fill="none"
         stroke={guideStroke}
         strokeWidth="1"

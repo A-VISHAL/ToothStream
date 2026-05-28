@@ -2,6 +2,7 @@ import React, { createContext, useEffect, useMemo, useRef, useState } from 'reac
 import { parseTranscriptToPayload } from './transcriptParser';
 import { useDeepgramTranscription } from './useDeepgramTranscription';
 import type {
+  CommandFeedback,
   PerioChartContextValue,
   PerioPayload,
   ToothState,
@@ -41,6 +42,27 @@ function createInitialTeethState(): Record<number, ToothState> {
   );
 }
 
+function cloneTeethState(source: Record<number, ToothState>): Record<number, ToothState> {
+  return Object.fromEntries(
+    Object.entries(source).map(([key, tooth]) => [
+      Number(key),
+      {
+        ...tooth,
+        buccal: { ...tooth.buccal, depth: [...tooth.buccal.depth] as [number, number, number] },
+        lingual: { ...tooth.lingual, depth: [...tooth.lingual.depth] as [number, number, number] },
+      },
+    ])
+  ) as Record<number, ToothState>;
+}
+
+interface ChartSnapshot {
+  teeth: Record<number, ToothState>;
+  currentTooth: number | null;
+  currentSurface: ToothSurface | null;
+  activeSiteIndex: number | null;
+  lastPayload: PerioPayload | null;
+}
+
 function normalizeSurface(surface?: string): ToothSurface {
   if (!surface) {
     return 'buccal';
@@ -56,6 +78,34 @@ function clampSiteIndex(value?: number): number {
   }
 
   return Math.max(0, Math.min(SITE_COUNT - 1, Math.trunc(value)));
+}
+
+function getNextToothInChartOrder(tooth: number): number | null {
+  if (tooth >= 1 && tooth < 16) {
+    return tooth + 1;
+  }
+
+  if (tooth === 16) {
+    return 32;
+  }
+
+  if (tooth > 17 && tooth <= 32) {
+    return tooth - 1;
+  }
+
+  if (tooth === 17) {
+    return 1;
+  }
+
+  return null;
+}
+
+function getNextCursorAfterCommit(tooth: number): { tooth: number | null; surface: ToothSurface; siteIndex: number } {
+  return {
+    tooth: getNextToothInChartOrder(tooth),
+    surface: 'buccal',
+    siteIndex: 0,
+  };
 }
 
 function hydratePayload(payload: PerioPayload): PerioPayload {
@@ -75,69 +125,182 @@ function ingestPayload(
   setLastPayload: React.Dispatch<React.SetStateAction<PerioPayload | null>>,
   setCurrentTooth: React.Dispatch<React.SetStateAction<number | null>>,
   setCurrentSurface: React.Dispatch<React.SetStateAction<ToothSurface | null>>,
-  setActiveSiteIndex: React.Dispatch<React.SetStateAction<number | null>>
+  setActiveSiteIndex: React.Dispatch<React.SetStateAction<number | null>>,
+  previousPayload: PerioPayload | null,
+  fallbackTooth: number | null,
+  fallbackSurface: ToothSurface | null,
+  fallbackSiteIndex: number | null,
+  updateActiveRef: (tooth: number | null, surface: ToothSurface | null, siteIndex: number | null) => void,
+  historyStackRef: React.MutableRefObject<ChartSnapshot[]>,
+  flashFeedback: (feedback: CommandFeedback) => void
 ) {
   const hydrated = hydratePayload(payload);
   const receivedAt = Date.now();
   const payloadTimestamp = hydrated.timestamp ?? receivedAt;
 
+  console.info('[Perio UI] payload received', hydrated);
+
   setLatencyMs(Math.max(0, receivedAt - payloadTimestamp));
   setLastPayload(hydrated);
 
-  if (typeof hydrated.tooth === 'number') {
-    const toothNumber = hydrated.tooth;
+  const hasChartSignal =
+    typeof hydrated.tooth === 'number' ||
+    Array.isArray(hydrated.depth) ||
+    hydrated.bleeding === true ||
+    hydrated.missing === true ||
+    hydrated.implant === true ||
+    typeof hydrated.surface === 'string' ||
+    typeof hydrated.siteIndex === 'number';
 
-    setCurrentTooth(toothNumber);
-    const surface = normalizeSurface(hydrated.surface);
-    setCurrentSurface(surface);
-    setActiveSiteIndex(clampSiteIndex(hydrated.siteIndex));
+  const toothNumber = typeof hydrated.tooth === 'number' ? hydrated.tooth : fallbackTooth;
+  const surface = normalizeSurface(hydrated.surface) ?? fallbackSurface ?? 'buccal';
+  const siteIndex = clampSiteIndex(hydrated.siteIndex ?? fallbackSiteIndex ?? undefined);
 
-    setTeeth((previous) => {
-      const target = previous[toothNumber] ?? {
-        toothNumber,
-        missing: false,
-        implant: false,
-        buccal: createSurfaceState(),
-        lingual: createSurfaceState(),
-        updatedAt: 0,
-      };
+  if (!hasChartSignal || toothNumber === null) {
+    console.warn('[Perio UI] dropping payload — no actionable chart signal or no target tooth', {
+      hasChartSignal,
+      toothNumber,
+      hydrated,
+    });
 
-      const nextTeeth = { ...previous };
-      const nextTooth = { ...target };
-
-      if (hydrated.missing === true) {
-        nextTooth.missing = true;
-        nextTooth.implant = false;
-      } else if (hydrated.missing === false) {
-        nextTooth.missing = false;
-      }
-
-      if (hydrated.implant === true) {
-        nextTooth.implant = true;
-        nextTooth.missing = false;
-      } else if (hydrated.implant === false) {
-        nextTooth.implant = false;
-      }
-
-      if (Array.isArray(hydrated.depth) && hydrated.depth.length === SITE_COUNT) {
-        nextTooth[surface] = {
-          depth: [hydrated.depth[0] ?? 0, hydrated.depth[1] ?? 0, hydrated.depth[2] ?? 0],
-          bleeding: Boolean(hydrated.bleeding),
-          siteIndex: clampSiteIndex(hydrated.siteIndex),
-          updatedAt: receivedAt,
+    // Still record the raw transcript for visibility if present
+    if (typeof hydrated.transcript === 'string' && hydrated.transcript.trim()) {
+      setTranscriptEntries((previous) => {
+        const nextEntry = {
+          id: `socket-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          text: hydrated.transcript!.trim(),
+          timestamp: Date.now(),
+          source: 'socket' as const,
+          isFinal: true,
         };
 
-        if (!hydrated.missing && !hydrated.implant) {
-          nextTooth.missing = false;
-          nextTooth.implant = false;
-        }
+        return [nextEntry, ...previous].slice(0, 12);
+      });
+    }
+
+    return;
+  }
+
+  console.info('[Perio UI] cursor before triplet', {
+    currentTooth: fallbackTooth,
+    currentSurface: fallbackSurface,
+    currentSiteIndex: fallbackSiteIndex,
+    resolvedTooth: toothNumber,
+    resolvedSurface: surface,
+    resolvedSiteIndex: siteIndex,
+  });
+
+  const shouldCommitDepths = Array.isArray(hydrated.depth) && hydrated.depth.length === SITE_COUNT;
+
+  const nextCursor = getNextCursorAfterCommit(toothNumber);
+
+  setCurrentTooth(nextCursor.tooth);
+  setCurrentSurface(nextCursor.surface);
+  setActiveSiteIndex(nextCursor.siteIndex);
+  updateActiveRef(nextCursor.tooth, nextCursor.surface, nextCursor.siteIndex);
+
+  console.info('[Perio UI] state update queued', {
+    toothNumber,
+    surface,
+    siteIndex,
+    reusedFallback: typeof hydrated.tooth !== 'number',
+    nextCursor,
+  });
+
+  // Also push a debug transcript entry with the JSON payload for end-to-end visibility
+  setTranscriptEntries((previous) => {
+    const nextEntry = {
+      id: `socket-json-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      text: JSON.stringify({ tooth: toothNumber, surface, depth: hydrated.depth ?? null, siteIndex }),
+      timestamp: Date.now(),
+      source: 'socket' as const,
+      isFinal: true,
+    };
+
+    return [nextEntry, ...previous].slice(0, 12);
+  });
+
+  setTeeth((previous) => {
+    const target = previous[toothNumber] ?? {
+      toothNumber,
+      missing: false,
+      implant: false,
+      buccal: createSurfaceState(),
+      lingual: createSurfaceState(),
+      updatedAt: 0,
+    };
+
+    const nextTeeth = { ...previous };
+    const nextTooth = { ...target };
+
+    if (shouldCommitDepths) {
+      historyStackRef.current.push({
+        teeth: cloneTeethState(previous),
+        currentTooth: fallbackTooth,
+        currentSurface: fallbackSurface,
+        activeSiteIndex: fallbackSiteIndex,
+        lastPayload: previousPayload,
+      });
+    }
+
+    if (hydrated.missing === true) {
+      nextTooth.missing = true;
+      nextTooth.implant = false;
+    } else if (hydrated.missing === false) {
+      nextTooth.missing = false;
+    }
+
+    if (hydrated.implant === true) {
+      nextTooth.implant = true;
+      nextTooth.missing = false;
+    } else if (hydrated.implant === false) {
+      nextTooth.implant = false;
+    }
+
+    if (Array.isArray(hydrated.depth) && hydrated.depth.length === SITE_COUNT) {
+      nextTooth[surface] = {
+        depth: [hydrated.depth[0] ?? 0, hydrated.depth[1] ?? 0, hydrated.depth[2] ?? 0],
+        bleeding: Boolean(hydrated.bleeding),
+        siteIndex,
+        updatedAt: receivedAt,
+      };
+
+      if (!hydrated.missing && !hydrated.implant) {
+        nextTooth.missing = false;
+        nextTooth.implant = false;
       }
+    }
 
-      nextTooth.updatedAt = receivedAt;
-      nextTeeth[toothNumber] = nextTooth;
+    nextTooth.updatedAt = receivedAt;
+    nextTeeth[toothNumber] = nextTooth;
 
-      return nextTeeth;
+    console.info('[Perio UI] tooth state updated', {
+      toothNumber,
+      surface,
+      depth: nextTooth[surface].depth,
+      bleeding: nextTooth[surface].bleeding,
     });
+
+    if (Array.isArray(hydrated.depth) && hydrated.depth.length === SITE_COUNT) {
+      console.info('[Perio UI] triplet committed', {
+        tooth: toothNumber,
+        surface,
+        depth: nextTooth[surface].depth,
+      });
+    }
+
+    return nextTeeth;
+  });
+
+  console.info('[Perio UI] advance cursor', {
+    fromTooth: toothNumber,
+    toTooth: nextCursor.tooth,
+    toSurface: nextCursor.surface,
+    toSiteIndex: nextCursor.siteIndex,
+  });
+
+  if (hydrated.bleeding) {
+    flashFeedback({ kind: 'bleeding', message: 'BLEEDING SET' });
   }
 
   setTranscriptEntries((previous) => {
@@ -159,12 +322,68 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
   const [socketUrl] = useState(transcription.socketUrl);
   const [latencyMs, setLatencyMs] = useState<number | null>(null);
   const [lastPayload, setLastPayload] = useState<PerioPayload | null>(null);
-  const [currentTooth, setCurrentTooth] = useState<number | null>(null);
-  const [currentSurface, setCurrentSurface] = useState<ToothSurface | null>(null);
-  const [activeSiteIndex, setActiveSiteIndex] = useState<number | null>(null);
+  const [currentTooth, setCurrentTooth] = useState<number | null>(1);
+  const [currentSurface, setCurrentSurface] = useState<ToothSurface | null>('buccal');
+  const [activeSiteIndex, setActiveSiteIndex] = useState<number | null>(0);
   const [transcripts, setTranscriptEntries] = useState<TranscriptEntry[]>([]);
   const [teeth, setTeeth] = useState<Record<number, ToothState>>(createInitialTeethState);
+  const [commandFeedback, setCommandFeedback] = useState<CommandFeedback | null>(null);
   const processedTranscriptIdsRef = useRef<Set<string>>(new Set());
+  const lastActiveToothRef = useRef<number | null>(1);
+  const lastActiveSurfaceRef = useRef<ToothSurface | null>('buccal');
+  const lastActiveSiteIndexRef = useRef<number | null>(0);
+  const historyStackRef = useRef<ChartSnapshot[]>([]);
+  const feedbackTimerRef = useRef<number | null>(null);
+
+  const updateActiveRef = (tooth: number | null, surface: ToothSurface | null, siteIndex: number | null) => {
+    lastActiveToothRef.current = tooth;
+    lastActiveSurfaceRef.current = surface;
+    lastActiveSiteIndexRef.current = siteIndex;
+  };
+
+  const flashFeedback = (feedback: CommandFeedback) => {
+    setCommandFeedback(feedback);
+
+    if (feedbackTimerRef.current !== null) {
+      window.clearTimeout(feedbackTimerRef.current);
+    }
+
+    feedbackTimerRef.current = window.setTimeout(() => {
+      setCommandFeedback(null);
+      feedbackTimerRef.current = null;
+    }, 2200);
+  };
+
+  const applyUndo = () => {
+    const snapshot = historyStackRef.current.pop();
+
+    if (!snapshot) {
+      flashFeedback({ kind: 'info', message: 'NOTHING TO UNDO' });
+      return;
+    }
+
+    setTeeth(snapshot.teeth);
+    setCurrentTooth(snapshot.currentTooth);
+    setCurrentSurface(snapshot.currentSurface);
+    setActiveSiteIndex(snapshot.activeSiteIndex);
+    updateActiveRef(snapshot.currentTooth, snapshot.currentSurface, snapshot.activeSiteIndex);
+    setLastPayload(snapshot.lastPayload);
+    flashFeedback({ kind: 'undo', message: 'UNDO APPLIED' });
+    console.info('[Perio UI] undo applied', {
+      restoredTooth: snapshot.currentTooth,
+      restoredSurface: snapshot.currentSurface,
+      restoredSiteIndex: snapshot.activeSiteIndex,
+    });
+  };
+
+  useEffect(() => {
+    console.debug('[Perio UI] chart rerendered', {
+      currentTooth,
+      currentSurface,
+      activeSiteIndex,
+      updatedAt: currentTooth ? teeth[currentTooth]?.updatedAt ?? 0 : 0,
+    });
+  }, [activeSiteIndex, currentSurface, currentTooth, teeth]);
 
   useEffect(() => {
     setConnectionState(transcription.connectionState);
@@ -185,13 +404,83 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
 
     processedTranscriptIdsRef.current.add(latestFinal.id);
 
-    const payload = parseTranscriptToPayload(latestFinal.text);
-    if (!payload) {
+    const normalizedTranscript = latestFinal.text.trim().toLowerCase();
+
+    console.info('[Perio UI] final transcript received', {
+      rawTranscript: latestFinal.text,
+      normalizedTranscript,
+    });
+
+    if (normalizedTranscript === 'undo') {
+      applyUndo();
+      setTranscriptEntries((previous) => [
+        {
+          id: `socket-undo-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          text: latestFinal.text.trim(),
+          timestamp: Date.now(),
+          source: 'deepgram' as const,
+          isFinal: true,
+        },
+        ...previous,
+      ].slice(0, 12));
       return;
     }
 
-    ingestPayload(payload, setTeeth, setTranscriptEntries, setLatencyMs, setLastPayload, setCurrentTooth, setCurrentSurface, setActiveSiteIndex);
-  }, [setTeeth, transcription.segments]);
+    const payload = parseTranscriptToPayload(latestFinal.text);
+    if (!payload) {
+      // No clinical payload detected — still preserve the raw final transcript
+      console.info('[Perio UI] final transcript (no payload)', { text: latestFinal.text });
+
+      setTranscriptEntries((previous) => {
+        const nextEntry = {
+          id: `socket-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          text: latestFinal.text.trim(),
+          timestamp: Date.now(),
+          source: 'deepgram' as const,
+          isFinal: true,
+        };
+
+        return [nextEntry, ...previous].slice(0, 12);
+      });
+
+      return;
+    }
+
+    console.info('[Perio UI] parsed payload from final transcript', { payload });
+
+    if (payload.tooth !== undefined && Array.isArray(payload.depth) && payload.depth.length === SITE_COUNT) {
+      flashFeedback({
+        kind: 'jump',
+        message: `JUMP TO TOOTH ${payload.tooth}`,
+      });
+    } else if (payload.bleeding) {
+      flashFeedback({ kind: 'bleeding', message: 'BLEEDING SET' });
+    }
+
+    ingestPayload(
+      payload,
+      setTeeth,
+      setTranscriptEntries,
+      setLatencyMs,
+      setLastPayload,
+      setCurrentTooth,
+      setCurrentSurface,
+      setActiveSiteIndex,
+      lastPayload,
+      currentTooth,
+      currentSurface,
+      activeSiteIndex,
+      updateActiveRef,
+      historyStackRef,
+      flashFeedback
+    );
+  }, [setTeeth, transcription.segments, currentTooth, currentSurface, activeSiteIndex, lastPayload]);
+
+  useEffect(() => {
+    if (transcription.interimTranscript) {
+      console.debug('[Perio UI] interim transcript update', transcription.interimTranscript);
+    }
+  }, [transcription.interimTranscript]);
 
   const value = useMemo<PerioChartContextValue>(
     () => ({
@@ -206,6 +495,7 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
       interimTranscript: transcription.interimTranscript,
       isRecording: transcription.isRecording,
       transcriptionError: transcription.error,
+      commandFeedback,
       startRecording: transcription.startRecording,
       stopRecording: transcription.stopRecording,
       teeth,
@@ -221,6 +511,7 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
       teeth,
       transcripts,
       transcription.error,
+      commandFeedback,
       transcription.interimTranscript,
       transcription.isRecording,
       transcription.startRecording,

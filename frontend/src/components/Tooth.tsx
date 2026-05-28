@@ -58,6 +58,7 @@ function SiteGroup({
       {SITE_X.map((x, index) => {
         const isActiveSite = isActiveSurface && activeSiteIndex === index;
         const depth = surfaceState.depth[index];
+        const renderedDepth = formatDepth(depth);
 
         return (
           <g key={`${surface}-${index}`} transform={`translate(${x}, ${y})`} className="transition duration-150">
@@ -67,23 +68,23 @@ function SiteGroup({
               width={SITE_CHIP_SIZE}
               height={SITE_CHIP_SIZE}
               rx="7"
-              fill={isActiveSite ? '#d9f9f1' : '#f8fafc'}
+              fill={isActiveSite ? '#dffaf3' : '#f8fafc'}
               stroke={isActiveSite ? '#14b8a6' : '#cbd5e1'}
-              strokeWidth={isActiveSite ? '1.75' : '1'}
+              strokeWidth={isActiveSite ? '1.9' : '1'}
               className={isActiveSite ? 'pulse-glow' : ''}
             />
             <text
-              y="0"
+              y="1"
               textAnchor="middle"
               dominantBaseline="middle"
-              fontSize={SITE_NUMBER_FONT_SIZE}
-              fontWeight="800"
-              fill="#111827"
+              fontSize={depth > 0 ? SITE_NUMBER_FONT_SIZE + 2 : SITE_NUMBER_FONT_SIZE - 1}
+              fontWeight="900"
+              fill={depth > 0 ? '#0f172a' : '#64748b'}
               stroke="#ffffff"
-              strokeWidth="0.55"
+              strokeWidth="0.7"
               paintOrder="stroke fill"
             >
-              {formatDepth(depth)}
+              {renderedDepth}
             </text>
             <text
               y={SITE_CHIP_SIZE / 2 + 9}
@@ -98,8 +99,8 @@ function SiteGroup({
             >
               {SITE_LABELS[index]}
             </text>
-            {surfaceState.bleeding && isActiveSite ? (
-              <circle cx="9" cy="-9" r="3.5" fill="#ef4444" />
+            {surfaceState.bleeding ? (
+              <circle cx="9" cy="-9" r="3.5" fill="#ef4444" className={isActiveSite ? 'pulse-bleed' : undefined} />
             ) : null}
           </g>
         );

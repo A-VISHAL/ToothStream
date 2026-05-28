@@ -98,6 +98,7 @@ function SiteOverlay({
         const value = depth[index];
         const markerY = connectorY + direction * depthToLength(value);
         const connectorEnd = topSurface ? markerY - 8 : markerY + 8;
+        const renderedDepth = value > 0 ? String(value) : '–';
 
         return (
           <g key={`${surface}-${index}`}>
@@ -117,24 +118,24 @@ function SiteOverlay({
                 width={SITE_CHIP_SIZE}
                 height={SITE_CHIP_SIZE}
                 rx="7"
-                fill={isActiveSite ? (topSurface ? '#def8f2' : '#e4f1ff') : '#ffffff'}
-                stroke={isActiveSite ? (topSurface ? '#0f9f8a' : '#0b8ddb') : '#d2dae4'}
-                strokeWidth={isActiveSite ? 1.15 : 0.8}
+                fill={isActiveSite ? (topSurface ? '#dffaf3' : '#e8f3ff') : '#ffffff'}
+                stroke={isActiveSite ? (topSurface ? '#0f9f8a' : '#0b8ddb') : '#cdd6e0'}
+                strokeWidth={isActiveSite ? 1.45 : 0.95}
                 className={isActiveSite ? 'site-chip site-chip-active' : 'site-chip'}
               />
-                  <text
-                    y="0"
-                    textAnchor="middle"
-                    dominantBaseline="middle"
-                    fontSize={SITE_NUMBER_FONT_SIZE}
-                    fontWeight="800"
-                    fill="#111827"
-                    stroke="#ffffff"
-                    strokeWidth="0.45"
-                    paintOrder="stroke fill"
-                  >
-                    {value > 0 ? value : '–'}
-                  </text>
+              <text
+                y="1"
+                textAnchor="middle"
+                dominantBaseline="middle"
+                fontSize={value > 0 ? SITE_NUMBER_FONT_SIZE + 2 : SITE_NUMBER_FONT_SIZE - 1}
+                fontWeight="900"
+                fill={value > 0 ? '#0f172a' : '#64748b'}
+                stroke="#ffffff"
+                strokeWidth="0.7"
+                paintOrder="stroke fill"
+              >
+                {renderedDepth}
+              </text>
               <text
                 y={SITE_CHIP_SIZE / 2 + 9}
                 textAnchor="middle"
@@ -148,7 +149,17 @@ function SiteOverlay({
               >
                 {SITE_LABELS[index]}
               </text>
-              {bleeding && isActiveSite ? <circle cx="9" cy="-9" r="2.2" fill="#ef4444" stroke="#ffffff" strokeWidth="0.8" /> : null}
+              {bleeding ? (
+                <circle
+                  cx="9"
+                  cy="-9"
+                  r="2.35"
+                  fill="#ef4444"
+                  stroke="#ffffff"
+                  strokeWidth="0.9"
+                  className={isActiveSite ? 'pulse-bleed' : undefined}
+                />
+              ) : null}
             </g>
           </g>
         );
@@ -221,6 +232,16 @@ export function ToothFactory({ tooth, toothNumber, arch, positionIndex, activeTo
   const shadowId = useMemo(() => `tooth-shadow-${arch}-${toothNumber}-${positionIndex}`, [arch, toothNumber, positionIndex]);
   const fill = `url(#${shadowId}-fill)`;
   const stroke = isActive ? '#0ea5e9' : '#b9c6d4';
+
+  console.debug('[Perio UI] render tooth factory', {
+    toothNumber,
+    arch,
+    isActive,
+    activeSurface,
+    activeSiteIndex,
+    buccalDepth: tooth.buccal.depth,
+    lingualDepth: tooth.lingual.depth,
+  });
 
   return (
     <g className={isActive || updatedRecently ? 'chart-pop' : undefined}>

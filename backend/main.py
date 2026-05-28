@@ -64,7 +64,7 @@ def build_deepgram_url() -> str:
     ]
 
     for keyterm in DEEPGRAM_KEYTERMS:
-        query.append(("keywords", f"{keyterm}:1.5"))
+           query.append(("keyterm", keyterm))
 
     return f"wss://api.deepgram.com/v1/listen?{urlencode(query)}"
 
