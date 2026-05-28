@@ -2,6 +2,7 @@ import asyncio
 import json
 import logging
 import os
+import time
 from itertools import count
 from contextlib import suppress
 from pathlib import Path
@@ -14,6 +15,8 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.websockets import WebSocketState
+
+from parser import parse_clinical_transcript
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("perio-voice-ai")
@@ -278,6 +281,12 @@ async def relay_deepgram_messages(
                     "speech_final": bool(payload.get("speech_final")),
                 },
             )
+
+            clinical_payload = parse_clinical_transcript(transcript)
+            if clinical_payload:
+                clinical_payload["timestamp"] = int(time.time() * 1000)
+                logger.info("Clinical chart payload parsed: %s", clinical_payload)
+                await safe_send_json(websocket, send_lock, clinical_payload)
 
 
 @app.websocket("/ws/audio")

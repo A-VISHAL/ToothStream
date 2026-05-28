@@ -61,12 +61,14 @@ function SiteOverlay({
   activeSiteIndex,
   depth,
   bleeding,
+  recession,
 }: {
   surface: ToothSurface;
   activeSurface: ToothSurface | null;
   activeSiteIndex: number | null;
   depth: [number, number, number];
   bleeding: boolean;
+  recession: boolean;
 }) {
   const isActiveSurface = surface === activeSurface;
   const topSurface = surface === 'lingual';
@@ -120,6 +122,9 @@ function SiteOverlay({
                 {value > 0 ? value : '–'}
               </text>
               {bleeding && isActiveSite ? <circle cx="6.5" cy="-6.5" r="2.2" fill="#ef4444" stroke="#ffffff" strokeWidth="0.8" /> : null}
+              {recession && isActiveSite ? (
+                <circle cx="-6.5" cy="-6.5" r="2.2" fill="#f59e0b" stroke="#fff7ed" strokeWidth="0.8" />
+              ) : null}
             </g>
 
             <text x={x} y={topSurface ? markerY - 10 : markerY + 16} textAnchor="middle" fontSize="4.4" className="fill-slate-400" opacity="0.8">
@@ -186,6 +191,7 @@ export function ToothFactory({ tooth, toothNumber, arch, positionIndex, activeTo
         activeSiteIndex={activeSiteIndex}
         depth={tooth.lingual.depth}
         bleeding={tooth.lingual.bleeding}
+        recession={tooth.lingual.recession}
       />
 
       <SiteOverlay
@@ -194,6 +200,7 @@ export function ToothFactory({ tooth, toothNumber, arch, positionIndex, activeTo
         activeSiteIndex={activeSiteIndex}
         depth={tooth.buccal.depth}
         bleeding={tooth.buccal.bleeding}
+        recession={tooth.buccal.recession}
       />
     </g>
   );

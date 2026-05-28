@@ -1,5 +1,13 @@
 export type ToothSurface = 'buccal' | 'lingual';
 
+export type ClinicalCommand = 'undo' | 'repeat' | 'correct' | 'skip' | 'resume';
+
+export interface ClinicalCursor {
+  tooth: number;
+  surface: ToothSurface;
+  siteIndex: number;
+}
+
 export type ConnectionState = 'connecting' | 'connected' | 'listening' | 'reconnecting' | 'disconnected' | 'error';
 
 export interface PerioPayload {
@@ -7,9 +15,13 @@ export interface PerioPayload {
   surface?: string;
   depth?: number[];
   bleeding?: boolean;
+  recession?: boolean;
   missing?: boolean;
   implant?: boolean;
   siteIndex?: number;
+  command?: ClinicalCommand;
+  advanceCursor?: boolean;
+  cursor?: ClinicalCursor;
   transcript?: string;
   timestamp?: number;
   type?: string;
@@ -18,6 +30,7 @@ export interface PerioPayload {
 export interface ToothSurfaceState {
   depth: [number, number, number];
   bleeding: boolean;
+  recession: boolean;
   siteIndex: number;
   updatedAt: number;
 }

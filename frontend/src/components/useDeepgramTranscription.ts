@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { TranscriptEntry, LiveTranscriptState } from '../types';
+import type { LiveTranscriptState, PerioPayload, TranscriptEntry } from '../types';
 
 const TARGET_SAMPLE_RATE = 16000;
 const DEFAULT_TRANSCRIPTION_SOCKET_URL = process.env.REACT_APP_TRANSCRIPTION_SOCKET_URL || 'ws://localhost:8000/ws/audio';
@@ -16,6 +16,8 @@ type TranscriptMessage = {
   state?: string;
   details?: string;
 };
+
+type ClinicalMessage = TranscriptMessage & PerioPayload;
 
 type ResampleState = {
   buffer: Float32Array;
@@ -124,6 +126,7 @@ export function useDeepgramTranscription() {
   const [isRecording, setIsRecording] = useState(false);
   const [interimTranscript, setInterimTranscript] = useState('');
   const [segments, setSegments] = useState<TranscriptEntry[]>([]);
+  const [clinicalEvents, setClinicalEvents] = useState<PerioPayload[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   const socketRef = useRef<WebSocket | null>(null);
@@ -302,6 +305,12 @@ export function useDeepgramTranscription() {
           return;
         }
 
+        if (payload.type === 'clinical') {
+          console.info('[STT] Clinical chart payload received:', payload);
+          setClinicalEvents((previous) => [...previous, payload as ClinicalMessage].slice(-40));
+          return;
+        }
+
         if (payload.is_final || payload.speech_final) {
           console.info('[STT] Final transcript received:', payload.transcript || '');
           pushSegment(payload.transcript || '');
@@ -406,6 +415,7 @@ export function useDeepgramTranscription() {
 
     pendingChunksRef.current = [];
     lastFinalTranscriptRef.current = '';
+    setClinicalEvents([]);
     resampleStateRef.current = { buffer: new Float32Array(0), position: 0 };
     setInterimTranscript('');
     setIsRecording(false);
@@ -434,6 +444,7 @@ export function useDeepgramTranscription() {
     setInterimTranscript('');
     lastFinalTranscriptRef.current = '';
     pendingChunksRef.current = [];
+    setClinicalEvents([]);
     resampleStateRef.current = { buffer: new Float32Array(0), position: 0 };
     audioChunkCountRef.current = 0;
     chunkProcessingRef.current = Promise.resolve();
@@ -502,6 +513,7 @@ export function useDeepgramTranscription() {
     () => ({
       connectionState,
       error,
+      clinicalEvents,
       interimTranscript,
       isRecording,
       segments,
@@ -509,6 +521,6 @@ export function useDeepgramTranscription() {
       startRecording,
       stopRecording,
     }),
-    [connectionState, error, interimTranscript, isRecording, segments, startRecording, stopRecording]
+    [clinicalEvents, connectionState, error, interimTranscript, isRecording, segments, startRecording, stopRecording]
   );
 }

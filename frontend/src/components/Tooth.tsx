@@ -63,6 +63,9 @@ function SiteGroup({
             {surfaceState.bleeding && isActiveSite ? (
               <circle cx="10" cy="-8" r="3.5" fill="#ef4444" />
             ) : null}
+            {surfaceState.recession && isActiveSite ? (
+              <circle cx="-10" cy="-8" r="3.4" fill="#f59e0b" stroke="#fff7ed" strokeWidth="0.8" />
+            ) : null}
           </g>
         );
       })}
