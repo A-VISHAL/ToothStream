@@ -11,6 +11,7 @@ function Dashboard() {
     latencyMs,
     socketUrl,
     lastPayload,
+    transcriptionError,
     currentTooth,
     currentSurface,
     activeSiteIndex,
@@ -67,6 +68,7 @@ function Dashboard() {
                 latencyMs={latencyMs}
                 socketUrl={socketUrl}
                 lastPayload={lastPayload}
+                transcriptionError={transcriptionError}
               />
             </div>
           </aside>

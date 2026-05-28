@@ -2,21 +2,18 @@ import asyncio
 import json
 import logging
 import os
-import time
-from itertools import count
+import inspect
+import re
 from contextlib import suppress
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlencode
 
 import websockets
-from websockets.exceptions import InvalidStatus
 from dotenv import load_dotenv
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.websockets import WebSocketState
-
-from parser import parse_clinical_transcript
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("perio-voice-ai")
@@ -24,48 +21,24 @@ logger = logging.getLogger("perio-voice-ai")
 load_dotenv(dotenv_path=Path(__file__).with_name(".env"))
 
 DEEPGRAM_API_KEY = os.getenv("DEEPGRAM_API_KEY", "").strip()
-
-
-def is_temporary_deepgram_token(value: str) -> bool:
-    return value.count(".") == 2 or value.startswith("eyJ")
-
-
-def normalize_deepgram_credentials() -> tuple[str, str]:
-    raw_value = DEEPGRAM_API_KEY.strip()
-
-    if raw_value.startswith("Authorization:"):
-        raw_value = raw_value.split(":", 1)[1].strip()
-
-    if raw_value.startswith("Token "):
-        return "Token", raw_value.removeprefix("Token ").strip()
-
-    if raw_value.startswith("Bearer "):
-        return "Bearer", raw_value.removeprefix("Bearer ").strip()
-
-    if is_temporary_deepgram_token(raw_value):
-        return "Bearer", raw_value
-
-    return "Token", raw_value
-
-
-def get_deepgram_auth_header() -> tuple[dict[str, str], str, str]:
-    auth_scheme, api_key = normalize_deepgram_credentials()
-    if auth_scheme == "Bearer":
-        logger.warning("Deepgram API key looks like a temporary token or JWT; a project API key is recommended.")
-
-    return {"Authorization": f"{auth_scheme} {api_key}"}, auth_scheme, api_key
-
-
-def build_deepgram_query_params() -> list[tuple[str, str]]:
-    return [
-        ("encoding", "linear16"),
-        ("sample_rate", "16000"),
-        ("channels", "1"),
-        ("interim_results", "true"),
-        ("punctuate", "false"),
-        ("smart_format", "false"),
-        ("language", "en"),
-    ]
+DEEPGRAM_KEYTERMS = [
+    "buccal",
+    "lingual",
+    "palatal",
+    "mesial",
+    "distal",
+    "gingival",
+    "periodontal",
+    "pocket depth",
+    "bleeding",
+    "implant",
+    "crown",
+    "bridge",
+    "canine",
+    "incisor",
+    "molar",
+    "premolar",
+]
 
 app = FastAPI()
 
@@ -79,90 +52,35 @@ app.add_middleware(
 
 
 def build_deepgram_url() -> str:
-    return f"wss://api.deepgram.com/v1/listen?{urlencode(build_deepgram_query_params())}"
+    query = [
+        ("model", "nova-3"),
+        ("language", "en"),
+        ("encoding", "linear16"),
+        ("channels", "1"),
+        ("sample_rate", "16000"),
+        ("interim_results", "true"),
+        ("punctuate", "false"),
+        ("smart_format", "false"),
+    ]
+
+    for keyterm in DEEPGRAM_KEYTERMS:
+        query.append(("keywords", f"{keyterm}:1.5"))
+
+    return f"wss://api.deepgram.com/v1/listen?{urlencode(query)}"
 
 
 def build_deepgram_headers() -> dict[str, str]:
-    headers, _, _ = get_deepgram_auth_header()
-    return headers
+    return {"Authorization": f"Token {DEEPGRAM_API_KEY}"}
 
 
-def redact_deepgram_headers(headers: dict[str, str]) -> dict[str, str]:
-    redacted = dict(headers)
-    authorization = redacted.get("Authorization")
-    if authorization:
-        auth_scheme, _, _ = authorization.partition(" ")
-        redacted["Authorization"] = f"{auth_scheme} ***REDACTED***"
-    return redacted
+def build_websockets_connect_kwargs() -> dict[str, Any]:
+    headers = build_deepgram_headers()
+    parameters = inspect.signature(websockets.connect).parameters
 
+    if "additional_headers" in parameters:
+        return {"additional_headers": headers}
 
-def log_deepgram_handshake_attempt(url: str, headers: dict[str, str]) -> None:
-    logger.info("Connecting to: %s", url)
-    logger.info("Deepgram params: %s", dict(build_deepgram_query_params()))
-    logger.info("Deepgram headers: %s", redact_deepgram_headers(headers))
-    logger.info("API key loaded: %s", "yes" if DEEPGRAM_API_KEY else "no")
-
-    if DEEPGRAM_API_KEY:
-        auth_scheme, api_key = normalize_deepgram_credentials()
-        logger.info(
-            "Deepgram key type: %s (%s)",
-            "temporary token" if auth_scheme == "Bearer" else "project API key",
-            f"{api_key[:4]}...{api_key[-4:]}" if len(api_key) > 8 else "redacted",
-        )
-
-
-def decode_response_body(body: Any) -> str:
-    if body is None:
-        return ""
-    if isinstance(body, bytes):
-        return body.decode("utf-8", errors="replace")
-    return str(body)
-
-
-def log_deepgram_handshake_failure(exc: BaseException) -> None:
-    response = getattr(exc, "response", None)
-    status_code = getattr(response, "status_code", None)
-    body = decode_response_body(getattr(response, "body", None))
-    if not body:
-        body = decode_response_body(getattr(response, "text", None))
-
-    logger.error("Deepgram handshake failed: %s", exc)
-    if status_code is not None:
-        logger.error("Deepgram handshake status code: %s", status_code)
-    if response is not None:
-        logger.error("Deepgram handshake response headers: %s", getattr(response, "headers", None))
-    if body:
-        logger.error("Deepgram handshake response body: %s", body)
-
-
-def connect_to_deepgram(url: str, headers: dict[str, str]):
-    log_deepgram_handshake_attempt(url, headers)
-    return websockets.connect(
-        url,
-        additional_headers=headers,
-        ping_interval=15,
-        ping_timeout=15,
-        close_timeout=5,
-        open_timeout=10,
-    )
-
-
-async def run_deepgram_minimal_connection_test(url: str, headers: dict[str, str]) -> None:
-    logger.info("Running Deepgram minimal websocket connection test.")
-    try:
-        async with connect_to_deepgram(url, headers) as deepgram_socket:
-            await deepgram_socket.send(b"\x00\x00" * 160)
-            received_message = False
-            with suppress(asyncio.TimeoutError):
-                message = await asyncio.wait_for(deepgram_socket.recv(), timeout=1.5)
-                received_message = True
-                logger.info("Deepgram minimal test received: %s", message)
-            if not received_message:
-                logger.info("Deepgram minimal test completed without a transcript within the timeout window.")
-            logger.info("Deepgram minimal websocket connection test succeeded.")
-    except InvalidStatus as exc:
-        log_deepgram_handshake_failure(exc)
-        raise
+    return {"extra_headers": headers}
 
 
 def extract_transcript(payload: dict[str, Any]) -> str:
@@ -172,6 +90,26 @@ def extract_transcript(payload: dict[str, Any]) -> str:
         return ""
 
     return (alternatives[0].get("transcript") or "").strip()
+
+
+def classify_deepgram_exception(exc: Exception) -> tuple[str, bool]:
+    message = str(exc).lower()
+
+    if re.search(r"\b(401|403|unauthori[sz]ed|forbidden|invalid api key|missing api key)\b", message):
+        return message, True
+
+    return message, False
+
+
+async def send_bridge_status(
+    websocket: WebSocket,
+    lock: asyncio.Lock,
+    state: str,
+    **details: Any,
+) -> None:
+    payload: dict[str, Any] = {"type": "status", "state": state}
+    payload.update(details)
+    await safe_send_json(websocket, lock, payload)
 
 
 async def safe_send_json(websocket: WebSocket, lock: asyncio.Lock, payload: dict[str, Any]) -> None:
@@ -196,8 +134,10 @@ async def receive_browser_audio(
     websocket: WebSocket,
     audio_queue: asyncio.Queue[bytes],
     stop_event: asyncio.Event,
-    audio_chunk_counter: count,
 ) -> None:
+    chunk_count = 0
+    total_bytes = 0
+
     try:
         while not stop_event.is_set():
             message = await websocket.receive()
@@ -208,8 +148,14 @@ async def receive_browser_audio(
 
             audio_chunk = message.get("bytes")
             if audio_chunk:
-                chunk_number = next(audio_chunk_counter)
-                logger.info("Browser audio chunk received #%d (%d bytes)", chunk_number, len(audio_chunk))
+                chunk_count += 1
+                total_bytes += len(audio_chunk)
+                logger.info(
+                    "Browser audio chunk received: chunk=%s bytes=%s total_bytes=%s",
+                    chunk_count,
+                    len(audio_chunk),
+                    total_bytes,
+                )
                 push_audio_chunk(audio_queue, audio_chunk)
                 continue
 
@@ -220,11 +166,9 @@ async def receive_browser_audio(
             with suppress(json.JSONDecodeError):
                 command = json.loads(text_message)
                 if command.get("type") == "stop":
-                    logger.info("Received stop command from browser client.")
                     stop_event.set()
                     return
     except WebSocketDisconnect:
-        logger.info("Browser websocket disconnected.")
         stop_event.set()
 
 
@@ -232,13 +176,21 @@ async def stream_audio_to_deepgram(
     deepgram_socket: websockets.WebSocketClientProtocol,
     audio_queue: asyncio.Queue[bytes],
     stop_event: asyncio.Event,
-    audio_chunk_counter: count,
 ) -> None:
+    chunk_count = 0
+    total_bytes = 0
+
     while not stop_event.is_set():
         chunk = await audio_queue.get()
         if chunk:
-            chunk_number = next(audio_chunk_counter)
-            logger.info("Forwarding audio chunk to Deepgram #%d (%d bytes)", chunk_number, len(chunk))
+            chunk_count += 1
+            total_bytes += len(chunk)
+            logger.info(
+                "Sending audio chunk to Deepgram: chunk=%s bytes=%s total_bytes=%s",
+                chunk_count,
+                len(chunk),
+                total_bytes,
+            )
             await deepgram_socket.send(chunk)
 
 
@@ -247,7 +199,6 @@ async def relay_deepgram_messages(
     websocket: WebSocket,
     send_lock: asyncio.Lock,
     stop_event: asyncio.Event,
-    transcript_counter: count,
 ) -> None:
     async for raw_message in deepgram_socket:
         if stop_event.is_set() or not isinstance(raw_message, str):
@@ -262,10 +213,8 @@ async def relay_deepgram_messages(
             if not transcript:
                 continue
 
-            transcript_number = next(transcript_counter)
             logger.info(
-                "Deepgram transcript received #%d (final=%s, speech_final=%s): %s",
-                transcript_number,
+                "Deepgram transcript received: final=%s speech_final=%s transcript=%s",
                 bool(payload.get("is_final")),
                 bool(payload.get("speech_final")),
                 transcript,
@@ -282,75 +231,46 @@ async def relay_deepgram_messages(
                 },
             )
 
-            clinical_payload = parse_clinical_transcript(transcript)
-            if clinical_payload:
-                clinical_payload["timestamp"] = int(time.time() * 1000)
-                logger.info("Clinical chart payload parsed: %s", clinical_payload)
-                await safe_send_json(websocket, send_lock, clinical_payload)
-
 
 @app.websocket("/ws/audio")
 async def websocket_audio_endpoint(websocket: WebSocket) -> None:
     await websocket.accept()
-    logger.info("Browser client connected to /ws/audio.")
+    logger.info("Client connected to /ws/audio from %s", websocket.client)
 
     if not DEEPGRAM_API_KEY:
         await websocket.send_json({"type": "error", "message": "Missing DEEPGRAM_API_KEY in backend/.env"})
         await websocket.close(code=1011, reason="Missing DEEPGRAM_API_KEY")
+        logger.error("Missing DEEPGRAM_API_KEY in backend/.env")
         return
 
     audio_queue: asyncio.Queue[bytes] = asyncio.Queue(maxsize=240)
     stop_event = asyncio.Event()
     send_lock = asyncio.Lock()
-    browser_audio_counter = count(1)
-    deepgram_audio_counter = count(1)
-    deepgram_transcript_counter = count(1)
-    receiver_task = asyncio.create_task(
-        receive_browser_audio(websocket, audio_queue, stop_event, browser_audio_counter)
-    )
+    receiver_task = asyncio.create_task(receive_browser_audio(websocket, audio_queue, stop_event))
     reconnect_delay = 0.5
-    deepgram_url = build_deepgram_url()
-    deepgram_headers = build_deepgram_headers()
 
-    await safe_send_json(websocket, send_lock, {"type": "status", "state": "connecting"})
+    await send_bridge_status(websocket, send_lock, "connecting", phase="browser_socket")
 
     try:
-        try:
-            await run_deepgram_minimal_connection_test(deepgram_url, deepgram_headers)
-        except InvalidStatus as exc:
-            log_deepgram_handshake_failure(exc)
-
-            if websocket.client_state == WebSocketState.CONNECTED:
-                await safe_send_json(
-                    websocket,
-                    send_lock,
-                    {
-                        "type": "error",
-                        "message": "Deepgram rejected the websocket handshake during the minimal test.",
-                        "details": str(exc),
-                    },
-                )
-
-            return
-
         while not stop_event.is_set():
             try:
-                async with connect_to_deepgram(deepgram_url, deepgram_headers) as deepgram_socket:
+                logger.info("Connecting to Deepgram live websocket.")
+                async with websockets.connect(
+                    build_deepgram_url(),
+                    **build_websockets_connect_kwargs(),
+                    ping_interval=15,
+                    ping_timeout=15,
+                    close_timeout=5,
+                ) as deepgram_socket:
                     logger.info("Deepgram live stream connected.")
                     reconnect_delay = 0.5
-                    await safe_send_json(websocket, send_lock, {"type": "status", "state": "connected"})
+                    await send_bridge_status(websocket, send_lock, "connected", phase="deepgram_connected")
 
                     sender_task = asyncio.create_task(
-                        stream_audio_to_deepgram(deepgram_socket, audio_queue, stop_event, deepgram_audio_counter)
+                        stream_audio_to_deepgram(deepgram_socket, audio_queue, stop_event)
                     )
                     reader_task = asyncio.create_task(
-                        relay_deepgram_messages(
-                            deepgram_socket,
-                            websocket,
-                            send_lock,
-                            stop_event,
-                            deepgram_transcript_counter,
-                        )
+                        relay_deepgram_messages(deepgram_socket, websocket, send_lock, stop_event)
                     )
 
                     done, pending = await asyncio.wait(
@@ -370,43 +290,39 @@ async def websocket_audio_endpoint(websocket: WebSocket) -> None:
                     if stop_event.is_set():
                         break
 
-                    await safe_send_json(websocket, send_lock, {"type": "status", "state": "reconnecting"})
-                    logger.info("Deepgram socket reopened after reconnect state.")
-                logger.info("Deepgram websocket closed.")
-            except WebSocketDisconnect:
-                logger.info("Browser websocket disconnected while bridge was active.")
-                stop_event.set()
-                break
-            except InvalidStatus as exc:
-                log_deepgram_handshake_failure(exc)
-
-                if websocket.client_state == WebSocketState.CONNECTED:
-                    await safe_send_json(
+                    logger.warning("Deepgram stream ended unexpectedly, retrying in %ss.", reconnect_delay)
+                    await send_bridge_status(
                         websocket,
                         send_lock,
-                        {
-                            "type": "error",
-                            "message": "Deepgram rejected the websocket handshake.",
-                            "details": str(exc),
-                        },
+                        "reconnecting",
+                        phase="deepgram_stream",
+                        retryInMs=int(reconnect_delay * 1000),
+                        detail="Deepgram stream ended unexpectedly.",
                     )
-
+            except WebSocketDisconnect:
                 stop_event.set()
                 break
             except Exception as exc:  # pragma: no cover - runtime bridge guard
+                message, fatal = classify_deepgram_exception(exc)
                 logger.exception("Deepgram bridge error: %s", exc)
 
                 if websocket.client_state == WebSocketState.CONNECTED:
-                    await safe_send_json(
+                    await send_bridge_status(
                         websocket,
                         send_lock,
-                        {
-                            "type": "error",
-                            "message": "Speech-to-text stream interrupted. Reconnecting...",
-                            "details": str(exc),
-                        },
+                        "error" if fatal else "reconnecting",
+                        phase="deepgram_connect" if fatal else "deepgram_stream",
+                        detail=message,
+                        message="Speech-to-text connection failed." if fatal else "Speech-to-text stream interrupted.",
+                        fatal=fatal,
+                        retryInMs=None if fatal else int(reconnect_delay * 1000),
                     )
 
+                if fatal:
+                    stop_event.set()
+                    break
+
+                logger.warning("Retrying Deepgram connection in %ss after bridge error.", reconnect_delay)
                 await asyncio.sleep(reconnect_delay)
                 reconnect_delay = min(reconnect_delay * 2, 5.0)
     finally:

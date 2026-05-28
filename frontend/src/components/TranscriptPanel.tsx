@@ -35,7 +35,7 @@ export function TranscriptPanel() {
       : connectionState === 'connected'
         ? 'Connected to Deepgram'
         : connectionState === 'reconnecting'
-          ? 'Reconnecting'
+          ? transcriptionError || 'Reconnecting'
           : connectionState === 'connecting'
             ? 'Connecting'
             : 'Disconnected';
@@ -46,7 +46,9 @@ export function TranscriptPanel() {
       : connectionState === 'connected'
         ? 'border-cyan-200 bg-cyan-50 text-cyan-800'
         : connectionState === 'reconnecting'
-          ? 'border-amber-200 bg-amber-50 text-amber-700'
+          ? transcriptionError
+            ? 'border-rose-200 bg-rose-50 text-rose-700'
+            : 'border-amber-200 bg-amber-50 text-amber-700'
           : connectionState === 'error'
             ? 'border-rose-200 bg-rose-50 text-rose-700'
             : 'border-slate-200 bg-slate-50 text-slate-600';

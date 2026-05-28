@@ -10,12 +10,18 @@ interface ToothProps {
 
 const SITE_X = [29, 60, 91];
 const SITE_LABELS = ['M', 'Mid', 'D'];
+const SITE_CHIP_SIZE = 26;
+const SITE_NUMBER_FONT_SIZE = 21;
+const SITE_LABEL_FONT_SIZE = 11;
+const SURFACE_TAG_FONT_SIZE = 22;
+const TOOTH_NUMBER_FONT_SIZE = 18;
 
 function formatDepth(value: number): string {
   return value > 0 ? String(value) : '–';
 }
 
 function SiteGroup({
+  isActiveTooth,
   surface,
   surfaceState,
   activeSurface,
@@ -23,6 +29,7 @@ function SiteGroup({
   y,
   label,
 }: {
+  isActiveTooth: boolean;
   surface: ToothSurface;
   surfaceState: ToothSurfaceState;
   activeSurface: ToothSurface | null;
@@ -30,12 +37,23 @@ function SiteGroup({
   y: number;
   label: string;
 }) {
-  const isActiveSurface = surface === activeSurface;
+  const isActiveSurface = isActiveTooth && surface === activeSurface;
 
   return (
     <g>
-      <text x="60" y={surface === 'lingual' ? y - 11 : y + 34} textAnchor="middle" className="fill-slate-500" fontSize="7.5">
-        {label}
+      <text
+        x="60"
+        y={surface === 'lingual' ? y - 11 : y + 34}
+        textAnchor="middle"
+        dominantBaseline="middle"
+        fontSize={SURFACE_TAG_FONT_SIZE}
+        fontWeight="800"
+        fill="#111827"
+        stroke="#ffffff"
+        strokeWidth="0.5"
+        paintOrder="stroke fill"
+      >
+        {surface === 'lingual' ? 'L' : 'B'}
       </text>
       {SITE_X.map((x, index) => {
         const isActiveSite = isActiveSurface && activeSiteIndex === index;
@@ -44,27 +62,44 @@ function SiteGroup({
         return (
           <g key={`${surface}-${index}`} transform={`translate(${x}, ${y})`} className="transition duration-150">
             <rect
-              x="-11"
-              y="-11"
-              width="22"
-              height="22"
+              x={`-${SITE_CHIP_SIZE / 2}`}
+              y={`-${SITE_CHIP_SIZE / 2}`}
+              width={SITE_CHIP_SIZE}
+              height={SITE_CHIP_SIZE}
               rx="7"
               fill={isActiveSite ? '#d9f9f1' : '#f8fafc'}
               stroke={isActiveSite ? '#14b8a6' : '#cbd5e1'}
               strokeWidth={isActiveSite ? '1.75' : '1'}
               className={isActiveSite ? 'pulse-glow' : ''}
             />
-            <text y="1.5" textAnchor="middle" fontSize="7.5" fontWeight="700" className="fill-slate-700">
+            <text
+              y="0"
+              textAnchor="middle"
+              dominantBaseline="middle"
+              fontSize={SITE_NUMBER_FONT_SIZE}
+              fontWeight="800"
+              fill="#111827"
+              stroke="#ffffff"
+              strokeWidth="0.55"
+              paintOrder="stroke fill"
+            >
               {formatDepth(depth)}
             </text>
-            <text y="19.5" textAnchor="middle" fontSize="5.5" className="fill-slate-400">
+            <text
+              y={SITE_CHIP_SIZE / 2 + 9}
+              textAnchor="middle"
+              dominantBaseline="hanging"
+              fontSize={SITE_LABEL_FONT_SIZE}
+              fontWeight="700"
+              fill="#334155"
+              stroke="#ffffff"
+              strokeWidth="0.35"
+              paintOrder="stroke fill"
+            >
               {SITE_LABELS[index]}
             </text>
             {surfaceState.bleeding && isActiveSite ? (
-              <circle cx="10" cy="-8" r="3.5" fill="#ef4444" />
-            ) : null}
-            {surfaceState.recession && isActiveSite ? (
-              <circle cx="-10" cy="-8" r="3.4" fill="#f59e0b" stroke="#fff7ed" strokeWidth="0.8" />
+              <circle cx="9" cy="-9" r="3.5" fill="#ef4444" />
             ) : null}
           </g>
         );
@@ -90,7 +125,7 @@ export function Tooth({ tooth, activeTooth, activeSurface, activeSiteIndex }: To
   const isMissing = tooth.missing;
   const isImplant = tooth.implant;
 
-  const topLabel = useMemo(() => 'Lingual / Palatal', []);
+  const topLabel = useMemo(() => 'L', []);
 
   return (
     <div
@@ -98,7 +133,7 @@ export function Tooth({ tooth, activeTooth, activeSurface, activeSiteIndex }: To
         isActive ? 'border-cyan-400 bg-cyan-50/70 shadow-[0_18px_38px_rgba(14,165,233,0.15)] chart-pop' : 'border-slate-200/80 bg-white/75'
       } ${isMissing ? 'opacity-55' : ''}`}
     >
-      <svg viewBox="0 0 120 170" className="h-[170px] w-full overflow-visible">
+      <svg viewBox="0 0 120 170" className="h-[170px] w-full overflow-visible" shapeRendering="geometricPrecision" textRendering="geometricPrecision">
         <defs>
           <linearGradient id={`${uniqueId}-fill`} x1="0%" y1="0%" x2="0%" y2="100%">
             <stop offset="0%" stopColor="#ffffff" />
@@ -109,7 +144,18 @@ export function Tooth({ tooth, activeTooth, activeSurface, activeSiteIndex }: To
           </filter>
         </defs>
 
-        <text x="60" y="14" textAnchor="middle" fontSize="12" fontWeight="700" className="fill-slate-700">
+        <text
+          x="60"
+          y="14"
+          textAnchor="middle"
+          dominantBaseline="middle"
+          fontSize={TOOTH_NUMBER_FONT_SIZE}
+          fontWeight="800"
+          fill="#111827"
+          stroke="#ffffff"
+          strokeWidth="0.45"
+          paintOrder="stroke fill"
+        >
           {tooth.toothNumber}
         </text>
 
@@ -137,8 +183,8 @@ export function Tooth({ tooth, activeTooth, activeSurface, activeSiteIndex }: To
           strokeLinecap="round"
         />
 
-        <SiteGroup surface="lingual" surfaceState={tooth.lingual} activeSurface={activeSurface} activeSiteIndex={activeSiteIndex} y={31} label={topLabel} />
-        <SiteGroup surface="buccal" surfaceState={tooth.buccal} activeSurface={activeSurface} activeSiteIndex={activeSiteIndex} y={128} label="Buccal" />
+        <SiteGroup isActiveTooth={isActive} surface="lingual" surfaceState={tooth.lingual} activeSurface={activeSurface} activeSiteIndex={activeSiteIndex} y={31} label={topLabel} />
+        <SiteGroup isActiveTooth={isActive} surface="buccal" surfaceState={tooth.buccal} activeSurface={activeSurface} activeSiteIndex={activeSiteIndex} y={128} label="B" />
 
         {isImplant ? <ImplantGlyph /> : null}
 

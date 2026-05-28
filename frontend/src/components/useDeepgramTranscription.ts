@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { LiveTranscriptState, PerioPayload, TranscriptEntry } from '../types';
+import type { TranscriptEntry, LiveTranscriptState } from '../types';
 
 const TARGET_SAMPLE_RATE = 16000;
 const DEFAULT_TRANSCRIPTION_SOCKET_URL = process.env.REACT_APP_TRANSCRIPTION_SOCKET_URL || 'ws://localhost:8000/ws/audio';
@@ -14,10 +14,11 @@ type TranscriptMessage = {
   speech_final?: boolean;
   message?: string;
   state?: string;
-  details?: string;
+  phase?: string;
+  detail?: string;
+  fatal?: boolean;
+  retryInMs?: number | null;
 };
-
-type ClinicalMessage = TranscriptMessage & PerioPayload;
 
 type ResampleState = {
   buffer: Float32Array;
@@ -31,26 +32,7 @@ function createAudioContext(): AudioContext {
     throw new Error('AudioContext is not supported in this browser.');
   }
 
-  try {
-    return new AudioContextConstructor({ sampleRate: TARGET_SAMPLE_RATE });
-  } catch {
-    return new AudioContextConstructor();
-  }
-}
-
-function createOfflineAudioContext(frameCount: number): OfflineAudioContext | null {
-  const OfflineAudioContextConstructor =
-    window.OfflineAudioContext || (window as Window & { webkitOfflineAudioContext?: typeof OfflineAudioContext }).webkitOfflineAudioContext;
-
-  if (!OfflineAudioContextConstructor) {
-    return null;
-  }
-
-  try {
-    return new OfflineAudioContextConstructor(1, Math.max(1, frameCount), TARGET_SAMPLE_RATE);
-  } catch {
-    return null;
-  }
+  return new AudioContextConstructor();
 }
 
 function resampleBuffer(input: Float32Array, inputSampleRate: number, outputSampleRate: number, state: ResampleState): Float32Array {
@@ -97,36 +79,11 @@ function floatTo16BitPCM(buffer: Float32Array): ArrayBuffer {
   return output.buffer;
 }
 
-async function resampleToTargetRate(input: Float32Array, inputSampleRate: number): Promise<Float32Array> {
-  if (inputSampleRate === TARGET_SAMPLE_RATE) {
-    return input;
-  }
-
-  const estimatedFrameCount = Math.max(1, Math.ceil((input.length * TARGET_SAMPLE_RATE) / inputSampleRate));
-  const offlineContext = createOfflineAudioContext(estimatedFrameCount);
-
-  if (!offlineContext) {
-    return input;
-  }
-
-  const sourceBuffer = offlineContext.createBuffer(1, input.length, inputSampleRate);
-  sourceBuffer.copyToChannel(input, 0);
-
-  const source = offlineContext.createBufferSource();
-  source.buffer = sourceBuffer;
-  source.connect(offlineContext.destination);
-  source.start(0);
-
-  const rendered = await offlineContext.startRendering();
-  return rendered.getChannelData(0).slice();
-}
-
 export function useDeepgramTranscription() {
   const [connectionState, setConnectionState] = useState<LiveTranscriptState>('disconnected');
   const [isRecording, setIsRecording] = useState(false);
   const [interimTranscript, setInterimTranscript] = useState('');
   const [segments, setSegments] = useState<TranscriptEntry[]>([]);
-  const [clinicalEvents, setClinicalEvents] = useState<PerioPayload[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   const socketRef = useRef<WebSocket | null>(null);
@@ -141,8 +98,13 @@ export function useDeepgramTranscription() {
   const pendingChunksRef = useRef<ArrayBuffer[]>([]);
   const lastFinalTranscriptRef = useRef('');
   const resampleStateRef = useRef<ResampleState>({ buffer: new Float32Array(0), position: 0 });
-  const audioChunkCountRef = useRef(0);
-  const chunkProcessingRef = useRef(Promise.resolve());
+  const chunkCountRef = useRef(0);
+  const sendCountRef = useRef(0);
+
+  const log = useCallback((level: 'info' | 'warn' | 'error' | 'debug', ...args: unknown[]) => {
+    const logger = console[level] ?? console.log;
+    logger('[Deepgram STT]', ...args);
+  }, []);
 
   const clearReconnectTimer = useCallback(() => {
     if (reconnectTimerRef.current !== null) {
@@ -164,63 +126,6 @@ export function useDeepgramTranscription() {
 
     pendingChunksRef.current = [];
   }, []);
-
-  const processAudioChunk = useCallback(
-    (input: Float32Array, inputSampleRate: number) => {
-      chunkProcessingRef.current = chunkProcessingRef.current
-        .then(async () => {
-          const downsampled = await resampleToTargetRate(input, inputSampleRate);
-          const pcmChunk = floatTo16BitPCM(downsampled);
-          const socket = socketRef.current;
-
-          audioChunkCountRef.current += 1;
-          const shouldLogChunk = audioChunkCountRef.current <= 5 || audioChunkCountRef.current % 25 === 0;
-
-          if (shouldLogChunk) {
-            console.info('[STT] PCM chunk ready:', {
-              chunk: audioChunkCountRef.current,
-              inputSampleRate,
-              outputSampleRate: TARGET_SAMPLE_RATE,
-              inputSamples: input.length,
-              outputBytes: pcmChunk.byteLength,
-            });
-          }
-
-          if (socket && socket.readyState === WebSocket.OPEN) {
-            if (shouldLogChunk) {
-              console.info('[STT] Sending audio chunk:', {
-                chunk: audioChunkCountRef.current,
-                outputBytes: pcmChunk.byteLength,
-              });
-            }
-
-            socket.send(pcmChunk);
-            setConnectionState('listening');
-            return;
-          }
-
-          if (shouldLogChunk) {
-            console.info('[STT] Buffering audio chunk until socket opens:', {
-              chunk: audioChunkCountRef.current,
-              outputBytes: pcmChunk.byteLength,
-              socketState: socket ? socket.readyState : 'none',
-            });
-          }
-
-          pendingChunksRef.current.push(pcmChunk);
-
-          if (pendingChunksRef.current.length > MAX_PENDING_CHUNKS) {
-            pendingChunksRef.current.shift();
-          }
-        })
-        .catch((chunkError) => {
-          console.error('[STT] Audio chunk processing failed:', chunkError);
-          setConnectionState('error');
-          setError(chunkError instanceof Error ? chunkError.message : 'Failed to encode microphone audio.');
-        });
-    },
-    []
-  );
 
   const pushSegment = useCallback((text: string) => {
     const transcript = text.trim();
@@ -248,22 +153,23 @@ export function useDeepgramTranscription() {
     clearReconnectTimer();
 
     if (socketRef.current && socketRef.current.readyState !== WebSocket.CLOSED) {
+      log('debug', 'Skipping socket connect because an existing socket is still active.', socketRef.current.readyState);
       return;
     }
 
     try {
+      log('info', 'Opening WebSocket', DEFAULT_TRANSCRIPTION_SOCKET_URL);
       const socket = new WebSocket(DEFAULT_TRANSCRIPTION_SOCKET_URL);
       socket.binaryType = 'arraybuffer';
       socketRef.current = socket;
       setConnectionState('connecting');
-      console.info('[STT] Opening transcription socket:', DEFAULT_TRANSCRIPTION_SOCKET_URL);
 
       socket.onopen = () => {
         if (isStoppingRef.current) {
           return;
         }
 
-        console.info('[STT] Transcription socket connected.');
+        log('info', 'WS open');
         setError(null);
         setConnectionState('connected');
         flushPendingChunks();
@@ -284,60 +190,60 @@ export function useDeepgramTranscription() {
 
         if (payload.type === 'status') {
           if (payload.state === 'connected') {
+            log('info', 'Backend status: connected', payload.phase || '', payload.detail || '');
             setConnectionState('connected');
+            if (payload.detail) {
+              setError(null);
+            }
           }
 
           if (payload.state === 'reconnecting') {
+            log('warn', 'Backend status: reconnecting', payload.phase || '', payload.detail || '', payload.retryInMs ?? '');
             setConnectionState('reconnecting');
+            setError(payload.detail ? `${payload.phase ?? 'Backend'}: ${payload.detail}` : 'Speech-to-text stream interrupted.');
           }
 
           return;
         }
 
         if (payload.type === 'error') {
-          const errorMessage = payload.details
-            ? `${payload.message || 'Deepgram transcription error.'} ${payload.details}`
-            : payload.message || 'Deepgram transcription error.';
+          log('error', 'Backend error payload', payload.phase || '', payload.detail || payload.message || '');
+          if (payload.fatal) {
+            shouldReconnectRef.current = false;
+          }
 
-          console.error('[STT] Backend error:', errorMessage);
-          setError(errorMessage);
-          setConnectionState(payload.message?.includes('Reconnecting') ? 'reconnecting' : 'error');
-          return;
-        }
-
-        if (payload.type === 'clinical') {
-          console.info('[STT] Clinical chart payload received:', payload);
-          setClinicalEvents((previous) => [...previous, payload as ClinicalMessage].slice(-40));
+          setError(
+            [payload.message, payload.detail].filter(Boolean).join(' - ') || 'Deepgram transcription error.'
+          );
+          setConnectionState('error');
           return;
         }
 
         if (payload.is_final || payload.speech_final) {
-          console.info('[STT] Final transcript received:', payload.transcript || '');
+          log('info', 'Final transcript received', payload.transcript || '');
           pushSegment(payload.transcript || '');
           setInterimTranscript('');
           return;
         }
 
-        console.info('[STT] Interim transcript received:', payload.transcript || '');
+        if (payload.transcript) {
+          log('debug', 'Interim transcript received', payload.transcript);
+        }
         setInterimTranscript(payload.transcript || '');
       };
 
-      socket.onerror = (event) => {
+      socket.onerror = () => {
         if (isStoppingRef.current) {
           return;
         }
 
-        console.error('[STT] Transcription socket error:', event);
+        log('error', 'WS error');
         setConnectionState('error');
         setError('Unable to connect to the transcription WebSocket.');
       };
 
       socket.onclose = (event) => {
-        console.warn('[STT] Transcription socket closed:', {
-          code: event.code,
-          reason: event.reason,
-          wasClean: event.wasClean,
-        });
+        log('warn', 'WS close', { code: event.code, reason: event.reason, wasClean: event.wasClean });
         socketRef.current = null;
 
         if (isStoppingRef.current) {
@@ -348,21 +254,23 @@ export function useDeepgramTranscription() {
         setConnectionState(shouldReconnectRef.current ? 'reconnecting' : 'disconnected');
 
         if (shouldReconnectRef.current) {
+          log('warn', 'WS reconnect scheduled', 1000);
           reconnectTimerRef.current = window.setTimeout(() => {
             reconnectTimerRef.current = null;
 
             if (shouldReconnectRef.current && !isStoppingRef.current) {
+              log('warn', 'WS reconnect firing');
               connectSocket();
             }
           }, 1000);
         }
       };
     } catch (socketError) {
-      console.error('[STT] Failed to open transcription socket:', socketError);
+      log('error', 'Failed to open websocket', socketError);
       setConnectionState('error');
       setError(socketError instanceof Error ? socketError.message : 'Failed to open the transcription WebSocket.');
     }
-  }, [clearReconnectTimer, flushPendingChunks, pushSegment]);
+  }, [clearReconnectTimer, flushPendingChunks, log, pushSegment]);
 
   const cleanupAudioGraph = useCallback(() => {
     if (workletRef.current) {
@@ -415,8 +323,9 @@ export function useDeepgramTranscription() {
 
     pendingChunksRef.current = [];
     lastFinalTranscriptRef.current = '';
-    setClinicalEvents([]);
     resampleStateRef.current = { buffer: new Float32Array(0), position: 0 };
+    chunkCountRef.current = 0;
+    sendCountRef.current = 0;
     setInterimTranscript('');
     setIsRecording(false);
     setConnectionState('disconnected');
@@ -444,12 +353,10 @@ export function useDeepgramTranscription() {
     setInterimTranscript('');
     lastFinalTranscriptRef.current = '';
     pendingChunksRef.current = [];
-    setClinicalEvents([]);
     resampleStateRef.current = { buffer: new Float32Array(0), position: 0 };
-    audioChunkCountRef.current = 0;
-    chunkProcessingRef.current = Promise.resolve();
+    chunkCountRef.current = 0;
+    sendCountRef.current = 0;
     setConnectionState('connecting');
-    console.info('[STT] Requesting microphone access.');
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
@@ -462,15 +369,12 @@ export function useDeepgramTranscription() {
       });
 
       mediaStreamRef.current = stream;
-      console.info('[STT] Microphone stream started.');
 
       const audioContext = createAudioContext();
       audioContextRef.current = audioContext;
       await audioContext.resume();
-      console.info('[STT] AudioContext resumed at sample rate:', audioContext.sampleRate);
 
       await audioContext.audioWorklet.addModule(WORKLET_URL);
-      console.info('[STT] Audio worklet loaded:', WORKLET_URL);
 
       const source = audioContext.createMediaStreamSource(stream);
       const worklet = new AudioWorkletNode(audioContext, WORKLET_NAME);
@@ -481,13 +385,34 @@ export function useDeepgramTranscription() {
       worklet.port.onmessage = (event: MessageEvent) => {
         const rawData = event.data as Float32Array | ArrayBuffer;
         const input = rawData instanceof Float32Array ? rawData : new Float32Array(rawData);
-        void processAudioChunk(input, audioContext.sampleRate);
+        const downsampled = resampleBuffer(input, audioContext.sampleRate, TARGET_SAMPLE_RATE, resampleStateRef.current);
+        const pcmChunk = floatTo16BitPCM(downsampled);
+        chunkCountRef.current += 1;
+        const socket = socketRef.current;
+
+        if (socket && socket.readyState === WebSocket.OPEN) {
+          sendCountRef.current += 1;
+          if (sendCountRef.current <= 5 || sendCountRef.current % 20 === 0) {
+            log('info', 'Sending audio chunk', { chunk: sendCountRef.current, bytes: pcmChunk.byteLength });
+          }
+          socket.send(pcmChunk);
+          setConnectionState('listening');
+          return;
+        }
+
+        if (chunkCountRef.current <= 5 || chunkCountRef.current % 20 === 0) {
+          log('debug', 'Buffering audio chunk until socket opens', { chunk: chunkCountRef.current, bytes: pcmChunk.byteLength });
+        }
+        pendingChunksRef.current.push(pcmChunk);
+
+        if (pendingChunksRef.current.length > MAX_PENDING_CHUNKS) {
+          pendingChunksRef.current.shift();
+        }
       };
 
       source.connect(worklet);
       worklet.connect(silentGain);
       silentGain.connect(audioContext.destination);
-      console.info('[STT] Audio graph connected.');
 
       sourceRef.current = source;
       workletRef.current = worklet;
@@ -496,12 +421,12 @@ export function useDeepgramTranscription() {
       connectSocket();
       setIsRecording(true);
     } catch (captureError) {
-      console.error('[STT] Microphone capture setup failed:', captureError);
+      log('error', 'Capture setup failed', captureError);
       await stopRecording();
       setConnectionState('error');
       setError(captureError instanceof Error ? captureError.message : 'Unable to access the microphone.');
     }
-  }, [connectSocket, isRecording, stopRecording]);
+  }, [connectSocket, isRecording, log, stopRecording]);
 
   useEffect(() => {
     return () => {
@@ -513,7 +438,6 @@ export function useDeepgramTranscription() {
     () => ({
       connectionState,
       error,
-      clinicalEvents,
       interimTranscript,
       isRecording,
       segments,
@@ -521,6 +445,6 @@ export function useDeepgramTranscription() {
       startRecording,
       stopRecording,
     }),
-    [clinicalEvents, connectionState, error, interimTranscript, isRecording, segments, startRecording, stopRecording]
+    [connectionState, error, interimTranscript, isRecording, segments, startRecording, stopRecording]
   );
 }

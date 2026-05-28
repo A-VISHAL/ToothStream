@@ -6,6 +6,7 @@ interface StatusBarProps {
   latencyMs: number | null;
   socketUrl: string;
   lastPayload: PerioPayload | null;
+  transcriptionError: string | null;
 }
 
 function statusTone(state: ConnectionState): string {
@@ -24,14 +25,14 @@ function statusTone(state: ConnectionState): string {
   }
 }
 
-function statusLabel(state: ConnectionState): string {
+function statusLabel(state: ConnectionState, transcriptionError: string | null): string {
   switch (state) {
     case 'connected':
       return 'Connected to Deepgram';
     case 'listening':
       return 'Listening';
     case 'reconnecting':
-      return 'Reconnecting';
+      return transcriptionError || 'Reconnecting';
     case 'error':
       return 'Error';
     case 'disconnected':
@@ -41,7 +42,7 @@ function statusLabel(state: ConnectionState): string {
   }
 }
 
-export function StatusBar({ connectionState, latencyMs, socketUrl, lastPayload }: StatusBarProps) {
+export function StatusBar({ connectionState, latencyMs, socketUrl, lastPayload, transcriptionError }: StatusBarProps) {
   const debugPayload = lastPayload ? JSON.stringify(lastPayload, null, 2) : 'No JSON payload received yet.';
 
   return (
@@ -53,7 +54,7 @@ export function StatusBar({ connectionState, latencyMs, socketUrl, lastPayload }
             <h3 className="mt-2 text-[20px] font-semibold tracking-tight text-slate-950">Live socket health</h3>
           </div>
           <span className={`rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.24em] ${statusTone(connectionState)}`}>
-            {statusLabel(connectionState)}
+            {statusLabel(connectionState, transcriptionError)}
           </span>
         </div>
 
@@ -74,7 +75,7 @@ export function StatusBar({ connectionState, latencyMs, socketUrl, lastPayload }
               {connectionState === 'connected' || connectionState === 'listening'
                 ? 'FastAPI WebSocket active'
                 : connectionState === 'reconnecting'
-                  ? 'Reconnecting to backend'
+                  ? transcriptionError || 'Reconnecting to backend'
                   : 'Backend disconnected'}
             </p>
           </div>

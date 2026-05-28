@@ -39,39 +39,28 @@ for tens_word, tens_value in TENS.items():
     for ones_word, ones_value in ONES.items():
         if ones_value == 0:
             continue
-        value = tens_value + ones_value
-        if value <= 32:
-            NUMBER_WORDS[f"{tens_word} {ones_word}"] = value
+
+        candidate = tens_value + ones_value
+        if candidate <= 32:
+            NUMBER_WORDS[f"{tens_word} {ones_word}"] = candidate
 
 SURFACE_ALIASES: dict[str, str] = {
     "buccal": "buccal",
     "facial": "buccal",
     "labial": "buccal",
+    "buckle": "buccal",
     "lingual": "lingual",
     "palatal": "lingual",
 }
 
 SITE_INDEX_WORDS: dict[str, int] = {
     "mesial": 0,
-    "middle": 1,
     "mid": 1,
+    "middle": 1,
     "distal": 2,
 }
 
-COMMAND_WORDS = {"undo", "repeat", "correct", "skip", "resume"}
-CLINICAL_KEYWORDS = {
-    "tooth",
-    "missing",
-    "implant",
-    "bleeding",
-    "bleed",
-    "recession",
-    "recessed",
-    *SURFACE_ALIASES.keys(),
-    *SITE_INDEX_WORDS.keys(),
-    *COMMAND_WORDS,
-}
-
+COMMAND_WORDS = {"undo", "repeat", "correct", "skip", "resume", "next", "previous"}
 TOKEN_PATTERN = re.compile(r"\d+|[a-z]+")
 
 
@@ -132,13 +121,21 @@ def extract_site_index(tokens: list[str]) -> int | None:
         site_index = SITE_INDEX_WORDS.get(token)
         if site_index is not None:
             return site_index
+
     return None
 
 
 def extract_command(tokens: list[str]) -> str | None:
-    for token in tokens:
+    for index, token in enumerate(tokens):
+        if token in {"next", "previous"}:
+            if index + 1 < len(tokens) and tokens[index + 1] == "tooth":
+                return token
+            if index == len(tokens) - 1:
+                return token
+
         if token in COMMAND_WORDS:
             return token
+
     return None
 
 
@@ -149,26 +146,47 @@ def extract_tooth(tokens: list[str]) -> tuple[int | None, set[int]]:
     if "tooth" in tokens:
         tooth_index = tokens.index("tooth")
         search_index = tooth_index + 1
+
         while search_index < len(tokens):
             candidate, length = parse_number_phrase(tokens, search_index)
             if candidate is not None and 1 <= candidate <= 32:
                 consumed = set(range(search_index, search_index + length))
                 return candidate, consumed
             search_index += 1
+
         return None, set()
 
-    surface_index = next((index for index, token in enumerate(tokens) if token in SURFACE_ALIASES), None)
     number_spans = find_number_spans(tokens)
+    if len(number_spans) == 1 and any(token in {"missing", "implant"} for token in tokens):
+        start_index, candidate, length = number_spans[0]
+        if 1 <= candidate <= 32:
+            return candidate, set(range(start_index, start_index + length))
 
+    surface_index = next((index for index, token in enumerate(tokens) if token in SURFACE_ALIASES), None)
     if surface_index is not None:
         for start_index, candidate, length in number_spans:
             if start_index < surface_index and 1 <= candidate <= 32:
                 return candidate, set(range(start_index, start_index + length))
 
-    if any(token in {"missing", "implant"} for token in tokens) and len(number_spans) == 1:
-        start_index, candidate, length = number_spans[0]
-        if 1 <= candidate <= 32:
-            return candidate, set(range(start_index, start_index + length))
+    return None, set()
+
+
+def extract_recession(tokens: list[str]) -> tuple[int | bool | None, set[int]]:
+    for index, token in enumerate(tokens):
+        if token not in {"recession", "recessed"}:
+            continue
+
+        search_index = index + 1
+        while search_index < len(tokens):
+            candidate, length = parse_number_phrase(tokens, search_index)
+            if candidate is not None:
+                consumed = set(range(index, search_index + length))
+                return candidate, consumed
+            if tokens[search_index] in COMMAND_WORDS or tokens[search_index] in SURFACE_ALIASES:
+                break
+            search_index += 1
+
+        return True, {index}
 
     return None, set()
 
@@ -196,8 +214,8 @@ def extract_triplet(tokens: list[str], consumed_indices: set[int]) -> list[int] 
     return None
 
 
-def parse_clinical_transcript(transcript: str) -> dict[str, Any] | None:
-    cleaned = transcript.strip()
+def parse_clinical_transcript(transcript: str, *, raw_transcript: str | None = None) -> dict[str, Any] | None:
+    cleaned = transcript.strip().lower()
     if not cleaned:
         return None
 
@@ -205,18 +223,29 @@ def parse_clinical_transcript(transcript: str) -> dict[str, Any] | None:
     if not tokens:
         return None
 
-    tooth, consumed_indices = extract_tooth(tokens)
+    command = extract_command(tokens)
+    tooth, tooth_consumed = extract_tooth(tokens)
     surface = extract_surface(tokens)
     site_index = extract_site_index(tokens)
-    command = extract_command(tokens)
+    recession, recession_consumed = extract_recession(tokens)
+
+    consumed_indices = tooth_consumed | recession_consumed
     depth = extract_triplet(tokens, consumed_indices)
+
     bleeding = any(token in {"bleeding", "bleed"} for token in tokens)
-    recession = any(token in {"recession", "recessed"} for token in tokens)
     missing = "missing" in tokens
     implant = "implant" in tokens
 
     if implant:
         missing = False
+
+    cursor_direction: int | None = None
+    if command in {"next", "skip", "resume"}:
+        cursor_direction = 1
+    elif command == "previous":
+        cursor_direction = -1
+    elif depth is not None:
+        cursor_direction = 1
 
     has_chart_signal = any(
         (
@@ -225,7 +254,7 @@ def parse_clinical_transcript(transcript: str) -> dict[str, Any] | None:
             site_index is not None,
             depth is not None,
             bleeding,
-            recession,
+            recession is not None,
             missing,
             implant,
             command is not None,
@@ -238,6 +267,8 @@ def parse_clinical_transcript(transcript: str) -> dict[str, Any] | None:
     payload: dict[str, Any] = {
         "type": "clinical",
         "transcript": cleaned,
+        "rawTranscript": raw_transcript.strip() if raw_transcript else cleaned,
+        "normalizedTranscript": cleaned,
         "timestamp": 0,
     }
 
@@ -255,17 +286,18 @@ def parse_clinical_transcript(transcript: str) -> dict[str, Any] | None:
 
     if command is not None:
         payload["command"] = command
-        if command in {"skip", "resume"}:
-            payload["advanceCursor"] = True
 
-    if depth is not None:
+    if cursor_direction is not None:
+        payload["cursorDirection"] = cursor_direction
+
+    if depth is not None or command in {"skip", "resume", "next", "previous"}:
         payload["advanceCursor"] = True
 
     if bleeding:
         payload["bleeding"] = True
 
-    if recession:
-        payload["recession"] = True
+    if recession is not None:
+        payload["recession"] = recession
 
     if missing:
         payload["missing"] = True

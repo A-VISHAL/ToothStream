@@ -47,6 +47,41 @@ function sectionLabel(arch: ArchSide): string {
   return arch === 'maxillary' ? 'Upper arch' : 'Lower arch';
 }
 
+function BackgroundGuideLayer({ arch }: { arch: ArchSide }) {
+  const contourStroke = arch === 'maxillary' ? '#9bcfc6' : '#9bbfe0';
+  const guideStroke = arch === 'maxillary' ? '#c7ece6' : '#c9ddf1';
+
+  return (
+    <g pointerEvents="none" opacity="0.72">
+      <path
+        d={arch === 'maxillary' ? 'M100 120C360 72 1240 72 1500 120' : 'M100 230C360 278 1240 278 1500 230'}
+        fill="none"
+        stroke={contourStroke}
+        strokeWidth="2.1"
+        strokeLinecap="round"
+        strokeDasharray="10 12"
+      />
+      <path
+        d={arch === 'maxillary' ? 'M128 108C390 58 1210 58 1472 108' : 'M128 242C390 292 1210 292 1472 242'}
+        fill="none"
+        stroke={guideStroke}
+        strokeWidth="1.2"
+        strokeLinecap="round"
+        opacity="0.8"
+      />
+      <path
+        d={arch === 'maxillary' ? 'M108 138C360 112 1240 112 1492 138' : 'M108 212C360 238 1240 238 1492 212'}
+        fill="none"
+        stroke={guideStroke}
+        strokeWidth="1"
+        strokeLinecap="round"
+        strokeDasharray="4 7"
+        opacity="0.72"
+      />
+    </g>
+  );
+}
+
 export function PerioArch({ arch, title, subtitle, teeth, chart, activeTooth, activeSurface, activeSiteIndex }: PerioArchProps) {
   return (
     <section className="rounded-[30px] border border-slate-200/80 bg-white/82 p-3 shadow-[0_18px_40px_rgba(15,23,42,0.06)] sm:p-4">
@@ -63,7 +98,13 @@ export function PerioArch({ arch, title, subtitle, teeth, chart, activeTooth, ac
       </header>
 
       <div className="relative mt-2 overflow-hidden rounded-[22px] border border-slate-200/80 bg-gradient-to-b from-slate-50 to-white p-1.5 sm:p-2">
-        <svg viewBox={`0 0 ${ARCH_WIDTH} ${ARCH_HEIGHT}`} preserveAspectRatio="xMidYMid meet" className="block h-auto w-full max-w-none">
+        <svg
+          viewBox={`0 0 ${ARCH_WIDTH} ${ARCH_HEIGHT}`}
+          preserveAspectRatio="xMidYMid meet"
+          className="block h-auto w-full max-w-none"
+          shapeRendering="geometricPrecision"
+          textRendering="geometricPrecision"
+        >
           <defs>
             <linearGradient id={`arch-${arch}-fade`} x1="0%" y1="0%" x2="0%" y2="100%">
               <stop offset="0%" stopColor="#eff6ff" stopOpacity="0.86" />
@@ -71,6 +112,7 @@ export function PerioArch({ arch, title, subtitle, teeth, chart, activeTooth, ac
             </linearGradient>
           </defs>
 
+          <BackgroundGuideLayer arch={arch} />
           <path d={archBandPath(arch)} fill={`url(#arch-${arch}-fade)`} opacity="0.56" />
           <path d={archGuidePath(arch)} fill="none" stroke="#cbd5e1" strokeWidth="2" strokeLinecap="round" strokeDasharray="8 10" />
 

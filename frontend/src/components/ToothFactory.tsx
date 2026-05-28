@@ -21,6 +21,10 @@ export interface ToothFactoryProps {
 const SITE_X = [24, 50, 76];
 const SITE_LABELS = ['M', 'Mid', 'D'];
 const TOOTH_SCALE = 1.3;
+const SITE_CHIP_SIZE = 26;
+const SITE_NUMBER_FONT_SIZE = 21;
+const SITE_LABEL_FONT_SIZE = 11;
+const SURFACE_TAG_FONT_SIZE = 22;
 
 function classifyTooth(toothNumber: number): ToothFamily {
   if ([7, 8, 9, 10, 23, 24, 25, 26].includes(toothNumber)) {
@@ -56,21 +60,21 @@ function familyNode({ family, ...props }: ToothAnatomyProps & { family: ToothFam
 }
 
 function SiteOverlay({
+  isActiveTooth,
   surface,
   activeSurface,
   activeSiteIndex,
   depth,
   bleeding,
-  recession,
 }: {
+  isActiveTooth: boolean;
   surface: ToothSurface;
   activeSurface: ToothSurface | null;
   activeSiteIndex: number | null;
   depth: [number, number, number];
   bleeding: boolean;
-  recession: boolean;
 }) {
-  const isActiveSurface = surface === activeSurface;
+  const isActiveSurface = isActiveTooth && surface === activeSurface;
   const topSurface = surface === 'lingual';
   const baseY = topSurface ? 22 : 138;
   const labelY = topSurface ? 8 : 168;
@@ -108,28 +112,44 @@ function SiteOverlay({
 
             <g transform={`translate(${x}, ${markerY})`}>
               <rect
-                x="-8"
-                y="-8"
-                width="16"
-                height="16"
-                rx="5"
+                x={`-${SITE_CHIP_SIZE / 2}`}
+                y={`-${SITE_CHIP_SIZE / 2}`}
+                width={SITE_CHIP_SIZE}
+                height={SITE_CHIP_SIZE}
+                rx="7"
                 fill={isActiveSite ? (topSurface ? '#def8f2' : '#e4f1ff') : '#ffffff'}
                 stroke={isActiveSite ? (topSurface ? '#0f9f8a' : '#0b8ddb') : '#d2dae4'}
                 strokeWidth={isActiveSite ? 1.15 : 0.8}
                 className={isActiveSite ? 'site-chip site-chip-active' : 'site-chip'}
               />
-              <text y="2.8" textAnchor="middle" fontSize="5.8" fontWeight="700" className="fill-slate-800">
-                {value > 0 ? value : '–'}
+                  <text
+                    y="0"
+                    textAnchor="middle"
+                    dominantBaseline="middle"
+                    fontSize={SITE_NUMBER_FONT_SIZE}
+                    fontWeight="800"
+                    fill="#111827"
+                    stroke="#ffffff"
+                    strokeWidth="0.45"
+                    paintOrder="stroke fill"
+                  >
+                    {value > 0 ? value : '–'}
+                  </text>
+              <text
+                y={SITE_CHIP_SIZE / 2 + 9}
+                textAnchor="middle"
+                dominantBaseline="hanging"
+                fontSize={SITE_LABEL_FONT_SIZE}
+                fontWeight="700"
+                fill="#334155"
+                stroke="#ffffff"
+                strokeWidth="0.35"
+                paintOrder="stroke fill"
+              >
+                {SITE_LABELS[index]}
               </text>
-              {bleeding && isActiveSite ? <circle cx="6.5" cy="-6.5" r="2.2" fill="#ef4444" stroke="#ffffff" strokeWidth="0.8" /> : null}
-              {recession && isActiveSite ? (
-                <circle cx="-6.5" cy="-6.5" r="2.2" fill="#f59e0b" stroke="#fff7ed" strokeWidth="0.8" />
-              ) : null}
+              {bleeding && isActiveSite ? <circle cx="9" cy="-9" r="2.2" fill="#ef4444" stroke="#ffffff" strokeWidth="0.8" /> : null}
             </g>
-
-            <text x={x} y={topSurface ? markerY - 10 : markerY + 16} textAnchor="middle" fontSize="4.4" className="fill-slate-400" opacity="0.8">
-              {SITE_LABELS[index]}
-            </text>
           </g>
         );
       })}
@@ -143,9 +163,53 @@ function SiteOverlay({
         opacity={isActiveSurface ? 0.6 : 0.42}
       />
 
-      <text x="50" y={labelY} textAnchor="middle" fontSize="4.6" fontWeight="700" letterSpacing="0.18em" className="fill-slate-500" opacity="0.45">
-        {topSurface ? 'LINGUAL / PALATAL' : 'BUCCAL'}
+      <text
+        x="50"
+        y={labelY}
+        textAnchor="middle"
+        dominantBaseline="middle"
+        fontSize={SURFACE_TAG_FONT_SIZE}
+        fontWeight="800"
+        fill="#111827"
+        stroke="#ffffff"
+        strokeWidth="0.5"
+        paintOrder="stroke fill"
+      >
+        {topSurface ? 'L' : 'B'}
       </text>
+    </g>
+  );
+}
+
+function BackgroundGuides({ arch }: { arch: ArchSide }) {
+  return (
+    <g pointerEvents="none" opacity="0.44">
+      <path
+        d={arch === 'maxillary' ? 'M18 22C34 16 66 16 82 22' : 'M18 138C34 144 66 144 82 138'}
+        fill="none"
+        stroke={arch === 'maxillary' ? '#78cfc1' : '#78b8e8'}
+        strokeWidth="0.9"
+        strokeLinecap="round"
+        strokeDasharray="5 5"
+      />
+      {SITE_X.map((x) => (
+        <g key={`${arch}-guide-${x}`}>
+          <path
+            d={arch === 'maxillary' ? `M${x} 24V40` : `M${x} 130V146`}
+            fill="none"
+            stroke={arch === 'maxillary' ? '#65bdb0' : '#67a8db'}
+            strokeWidth="0.6"
+            strokeDasharray="2.5 4"
+          />
+          <path
+            d={arch === 'maxillary' ? `M${x - 8} 30C${x - 4} 27 ${x + 4} 27 ${x + 8} 30` : `M${x - 8} 122C${x - 4} 125 ${x + 4} 125 ${x + 8} 122`}
+            fill="none"
+            stroke={arch === 'maxillary' ? '#b8e6de' : '#b8d8f1'}
+            strokeWidth="0.55"
+            strokeLinecap="round"
+          />
+        </g>
+      ))}
     </g>
   );
 }
@@ -153,7 +217,7 @@ function SiteOverlay({
 export function ToothFactory({ tooth, toothNumber, arch, positionIndex, activeTooth, activeSurface, activeSiteIndex }: ToothFactoryProps) {
   const family = classifyTooth(toothNumber);
   const isActive = toothNumber === activeTooth;
-  const updatedRecently = Date.now() - tooth.updatedAt < 2200;
+  const updatedRecently = tooth.updatedAt > 0 && Date.now() - tooth.updatedAt < 2200;
   const shadowId = useMemo(() => `tooth-shadow-${arch}-${toothNumber}-${positionIndex}`, [arch, toothNumber, positionIndex]);
   const fill = `url(#${shadowId}-fill)`;
   const stroke = isActive ? '#0ea5e9' : '#b9c6d4';
@@ -172,6 +236,7 @@ export function ToothFactory({ tooth, toothNumber, arch, positionIndex, activeTo
       </defs>
 
       <ellipse cx="50" cy="156" rx="24" ry="4" fill="#cbd5e1" opacity="0.06" />
+      <BackgroundGuides arch={arch} />
 
       <g transform={`translate(50 80) scale(${TOOTH_SCALE}) translate(-50 -80)`}>
         {familyNode({
@@ -186,21 +251,21 @@ export function ToothFactory({ tooth, toothNumber, arch, positionIndex, activeTo
       </g>
 
       <SiteOverlay
+        isActiveTooth={isActive}
         surface="lingual"
         activeSurface={activeSurface}
         activeSiteIndex={activeSiteIndex}
         depth={tooth.lingual.depth}
         bleeding={tooth.lingual.bleeding}
-        recession={tooth.lingual.recession}
       />
 
       <SiteOverlay
+        isActiveTooth={isActive}
         surface="buccal"
         activeSurface={activeSurface}
         activeSiteIndex={activeSiteIndex}
         depth={tooth.buccal.depth}
         bleeding={tooth.buccal.bleeding}
-        recession={tooth.buccal.recession}
       />
     </g>
   );
