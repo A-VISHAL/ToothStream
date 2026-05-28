@@ -83,6 +83,8 @@ function BackgroundGuideLayer({ arch }: { arch: ArchSide }) {
 }
 
 export function PerioArch({ arch, title, subtitle, teeth, chart, activeTooth, activeSurface, activeSiteIndex }: PerioArchProps) {
+  const activeIndex = activeTooth !== null ? teeth.findIndex((t) => t === activeTooth) : -1;
+  const hasActiveIndicator = activeIndex !== -1 && activeTooth !== null;
   return (
     <section className="rounded-[30px] border border-slate-200/80 bg-white/82 p-3 shadow-[0_18px_40px_rgba(15,23,42,0.06)] sm:p-4">
       <header className="flex flex-col gap-2 border-b border-slate-200/70 pb-3 sm:flex-row sm:items-end sm:justify-between">
@@ -113,6 +115,20 @@ export function PerioArch({ arch, title, subtitle, teeth, chart, activeTooth, ac
           </defs>
 
           <BackgroundGuideLayer arch={arch} />
+          {hasActiveIndicator ? (() => {
+            const tActive = activeIndex / Math.max(1, teeth.length - 1);
+            const xActive = START_X + (END_X - START_X) * tActive;
+            const yActive = archY(arch, tActive);
+
+            return (
+              <g className="pointer-events-none smooth-tooth" transform={`translate(${xActive} ${yActive})`}>
+                <g transform="translate(50 80)">
+                  <circle cx="0" cy="0" r="54" fill="none" stroke="#0ea5e9" strokeWidth="1.2" opacity="0.12" />
+                  <circle cx="0" cy="0" r="36" fill="none" stroke="#0ea5e9" strokeWidth="0.6" opacity="0.08" />
+                </g>
+              </g>
+            );
+          })() : null}
           <path d={archBandPath(arch)} fill={`url(#arch-${arch}-fade)`} opacity="0.56" />
           <path d={archGuidePath(arch)} fill="none" stroke="#cbd5e1" strokeWidth="2" strokeLinecap="round" strokeDasharray="8 10" />
 

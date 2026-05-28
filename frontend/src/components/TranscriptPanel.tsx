@@ -66,7 +66,7 @@ export function TranscriptPanel() {
             </p>
           </div>
           <span className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-[0.24em] ${micBadgeTone}`}>
-            <span className={`h-2.5 w-2.5 rounded-full ${isListening ? 'bg-emerald-500 pulse-bleed' : 'bg-slate-400'}`} />
+            <span className={`h-2.5 w-2.5 rounded-full ${isListening ? 'bg-emerald-500 mic-pulse' : 'bg-slate-400'}`} />
             {micBadge}
           </span>
         </div>

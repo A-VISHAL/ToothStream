@@ -246,8 +246,9 @@ export function ToothFactory({ tooth, toothNumber, arch, positionIndex, activeTo
   return (
     <g
       className={[
-        'transition-all duration-300 ease-out',
+        'transition-all duration-300 ease-out smooth-tooth',
         isActive || updatedRecently ? 'chart-pop' : '',
+        isActive ? 'active-tooth' : '',
       ]
         .filter(Boolean)
         .join(' ')}
