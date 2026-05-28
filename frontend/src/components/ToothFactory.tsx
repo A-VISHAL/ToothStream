@@ -244,7 +244,15 @@ export function ToothFactory({ tooth, toothNumber, arch, positionIndex, activeTo
   });
 
   return (
-    <g className={isActive || updatedRecently ? 'chart-pop' : undefined}>
+    <g
+      className={[
+        'transition-all duration-300 ease-out',
+        isActive || updatedRecently ? 'chart-pop' : '',
+      ]
+        .filter(Boolean)
+        .join(' ')}
+      style={isActive ? { filter: 'drop-shadow(0 0 18px rgba(14, 165, 233, 0.18))' } : undefined}
+    >
       <defs>
         <linearGradient id={`${shadowId}-fill`} x1="0%" y1="0%" x2="0%" y2="100%">
           <stop offset="0%" stopColor="#ffffff" />

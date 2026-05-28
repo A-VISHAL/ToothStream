@@ -1,3 +1,5 @@
+import type React from 'react';
+
 export type ToothSurface = 'buccal' | 'lingual';
 
 export type ConnectionState = 'connecting' | 'connected' | 'listening' | 'reconnecting' | 'disconnected' | 'error';
@@ -62,6 +64,8 @@ export interface PerioChartContextValue {
   isRecording: boolean;
   transcriptionError: string | null;
   commandFeedback: CommandFeedback | null;
+  soundEnabled: boolean;
+  setSoundEnabled: React.Dispatch<React.SetStateAction<boolean>>;
   startRecording: () => Promise<void>;
   stopRecording: () => Promise<void>;
   teeth: Record<number, ToothState>;

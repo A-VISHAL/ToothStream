@@ -13,6 +13,8 @@ function Dashboard() {
     lastPayload,
     transcriptionError,
     commandFeedback,
+    soundEnabled,
+    setSoundEnabled,
     currentTooth,
     currentSurface,
     activeSiteIndex,
@@ -22,7 +24,7 @@ function Dashboard() {
   return (
     <div className="app-shell relative px-4 py-4 sm:px-6 lg:px-8">
       {commandFeedback ? (
-        <div className="command-toast fixed right-4 top-4 z-50 rounded-full border px-4 py-2 text-xs font-semibold uppercase tracking-[0.24em] text-slate-950 sm:right-6 sm:top-6">
+        <div className="command-toast fixed right-4 top-4 z-50 rounded-full border px-4 py-2 text-xs font-semibold uppercase tracking-[0.24em] text-slate-950 opacity-100 transition-all duration-200 ease-out sm:right-6 sm:top-6">
           <span
             className={
               commandFeedback.kind === 'undo'
@@ -88,6 +90,8 @@ function Dashboard() {
                 socketUrl={socketUrl}
                 lastPayload={lastPayload}
                 transcriptionError={transcriptionError}
+                soundEnabled={soundEnabled}
+                setSoundEnabled={setSoundEnabled}
               />
             </div>
           </aside>

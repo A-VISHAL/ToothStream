@@ -1,4 +1,4 @@
-import React, { createContext, useEffect, useMemo, useRef, useState } from 'react';
+import React, { createContext, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { parseTranscriptToPayload } from './transcriptParser';
 import { useDeepgramTranscription } from './useDeepgramTranscription';
 import type {
@@ -53,6 +53,82 @@ function cloneTeethState(source: Record<number, ToothState>): Record<number, Too
       },
     ])
   ) as Record<number, ToothState>;
+}
+
+type SoundTone = 'chart' | 'bleeding' | 'undo' | 'jump';
+
+function createTonePlan(kind: SoundTone): Array<{ frequency: number; duration: number; delay: number }> {
+  switch (kind) {
+    case 'bleeding':
+      return [
+        { frequency: 392, duration: 0.08, delay: 0 },
+        { frequency: 523.25, duration: 0.12, delay: 0.09 },
+      ];
+    case 'undo':
+      return [
+        { frequency: 330, duration: 0.08, delay: 0 },
+        { frequency: 247, duration: 0.12, delay: 0.08 },
+      ];
+    case 'jump':
+      return [{ frequency: 587.33, duration: 0.09, delay: 0 }];
+    default:
+      return [{ frequency: 440, duration: 0.055, delay: 0 }];
+  }
+}
+
+function isUserAudioAllowed(): boolean {
+  return typeof window !== 'undefined' && window.navigator.userActivation?.hasBeenActive === true;
+}
+
+async function playTone(kind: SoundTone, enabled: boolean, audioContextRef: React.MutableRefObject<AudioContext | null>) {
+  if (!enabled || typeof window === 'undefined' || !isUserAudioAllowed()) {
+    return;
+  }
+
+  try {
+    const AudioContextCtor = window.AudioContext || (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+
+    if (!AudioContextCtor) {
+      return;
+    }
+
+    const audioContext = audioContextRef.current ?? new AudioContextCtor();
+
+    if (audioContext.state === 'suspended') {
+      await audioContext.resume();
+    }
+
+    audioContextRef.current = audioContext;
+
+    const now = audioContext.currentTime;
+    const gainNode = audioContext.createGain();
+    gainNode.gain.value = 0.0001;
+    gainNode.connect(audioContext.destination);
+
+    const tonePlan = createTonePlan(kind);
+
+    tonePlan.forEach((step) => {
+      const oscillator = audioContext.createOscillator();
+      oscillator.type = kind === 'undo' ? 'triangle' : 'sine';
+      oscillator.frequency.value = step.frequency;
+
+      const stepGain = audioContext.createGain();
+      stepGain.gain.setValueAtTime(0.0001, now + step.delay);
+      stepGain.gain.linearRampToValueAtTime(0.045, now + step.delay + 0.012);
+      stepGain.gain.exponentialRampToValueAtTime(0.0001, now + step.delay + step.duration);
+
+      oscillator.connect(stepGain);
+      stepGain.connect(gainNode);
+      oscillator.start(now + step.delay);
+      oscillator.stop(now + step.delay + step.duration + 0.01);
+    });
+
+    window.setTimeout(() => {
+      gainNode.disconnect();
+    }, 300);
+  } catch (error) {
+    console.debug('[Perio UI] command tone skipped', error);
+  }
 }
 
 interface ChartSnapshot {
@@ -132,7 +208,8 @@ function ingestPayload(
   fallbackSiteIndex: number | null,
   updateActiveRef: (tooth: number | null, surface: ToothSurface | null, siteIndex: number | null) => void,
   historyStackRef: React.MutableRefObject<ChartSnapshot[]>,
-  flashFeedback: (feedback: CommandFeedback) => void
+  flashFeedback: (feedback: CommandFeedback) => void,
+  playCommandSound: (kind: SoundTone) => void
 ) {
   const hydrated = hydratePayload(payload);
   const receivedAt = Date.now();
@@ -301,6 +378,7 @@ function ingestPayload(
 
   if (hydrated.bleeding) {
     flashFeedback({ kind: 'bleeding', message: 'BLEEDING SET' });
+    playCommandSound('bleeding');
   }
 
   setTranscriptEntries((previous) => {
@@ -328,12 +406,14 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
   const [transcripts, setTranscriptEntries] = useState<TranscriptEntry[]>([]);
   const [teeth, setTeeth] = useState<Record<number, ToothState>>(createInitialTeethState);
   const [commandFeedback, setCommandFeedback] = useState<CommandFeedback | null>(null);
+  const [soundEnabled, setSoundEnabled] = useState(true);
   const processedTranscriptIdsRef = useRef<Set<string>>(new Set());
   const lastActiveToothRef = useRef<number | null>(1);
   const lastActiveSurfaceRef = useRef<ToothSurface | null>('buccal');
   const lastActiveSiteIndexRef = useRef<number | null>(0);
   const historyStackRef = useRef<ChartSnapshot[]>([]);
   const feedbackTimerRef = useRef<number | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
 
   const updateActiveRef = (tooth: number | null, surface: ToothSurface | null, siteIndex: number | null) => {
     lastActiveToothRef.current = tooth;
@@ -341,7 +421,7 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
     lastActiveSiteIndexRef.current = siteIndex;
   };
 
-  const flashFeedback = (feedback: CommandFeedback) => {
+  const flashFeedback = useCallback((feedback: CommandFeedback) => {
     setCommandFeedback(feedback);
 
     if (feedbackTimerRef.current !== null) {
@@ -352,9 +432,16 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
       setCommandFeedback(null);
       feedbackTimerRef.current = null;
     }, 2200);
-  };
+  }, []);
 
-  const applyUndo = () => {
+  const playCommandSound = useCallback(
+    (kind: SoundTone) => {
+      void playTone(kind, soundEnabled, audioContextRef);
+    },
+    [soundEnabled]
+  );
+
+  const applyUndo = useCallback(() => {
     const snapshot = historyStackRef.current.pop();
 
     if (!snapshot) {
@@ -369,12 +456,13 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
     updateActiveRef(snapshot.currentTooth, snapshot.currentSurface, snapshot.activeSiteIndex);
     setLastPayload(snapshot.lastPayload);
     flashFeedback({ kind: 'undo', message: 'UNDO APPLIED' });
+    playCommandSound('undo');
     console.info('[Perio UI] undo applied', {
       restoredTooth: snapshot.currentTooth,
       restoredSurface: snapshot.currentSurface,
       restoredSiteIndex: snapshot.activeSiteIndex,
     });
-  };
+  }, [flashFeedback]);
 
   useEffect(() => {
     console.debug('[Perio UI] chart rerendered', {
@@ -453,6 +541,7 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
         kind: 'jump',
         message: `JUMP TO TOOTH ${payload.tooth}`,
       });
+      playCommandSound('jump');
     } else if (payload.bleeding) {
       flashFeedback({ kind: 'bleeding', message: 'BLEEDING SET' });
     }
@@ -472,9 +561,20 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
       activeSiteIndex,
       updateActiveRef,
       historyStackRef,
-      flashFeedback
+      flashFeedback,
+      playCommandSound
     );
-  }, [setTeeth, transcription.segments, currentTooth, currentSurface, activeSiteIndex, lastPayload]);
+  }, [setTeeth, transcription.segments, currentTooth, currentSurface, activeSiteIndex, lastPayload, applyUndo, flashFeedback, playCommandSound]);
+
+  useEffect(() => {
+    if (!soundEnabled && audioContextRef.current) {
+      void audioContextRef.current.suspend();
+    }
+
+    if (soundEnabled && audioContextRef.current?.state === 'suspended' && isUserAudioAllowed()) {
+      void audioContextRef.current.resume();
+    }
+  }, [soundEnabled]);
 
   useEffect(() => {
     if (transcription.interimTranscript) {
@@ -496,6 +596,8 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
       isRecording: transcription.isRecording,
       transcriptionError: transcription.error,
       commandFeedback,
+      soundEnabled,
+      setSoundEnabled,
       startRecording: transcription.startRecording,
       stopRecording: transcription.stopRecording,
       teeth,
@@ -512,6 +614,7 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
       transcripts,
       transcription.error,
       commandFeedback,
+      soundEnabled,
       transcription.interimTranscript,
       transcription.isRecording,
       transcription.startRecording,

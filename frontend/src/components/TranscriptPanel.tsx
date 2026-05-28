@@ -28,6 +28,7 @@ export function TranscriptPanel() {
   } = usePerioChart();
 
   const currentSite = activeSiteIndex !== null ? SITE_NAMES[activeSiteIndex] : 'Mid';
+  const isListening = connectionState === 'listening';
 
   const micBadge =
     connectionState === 'listening'
@@ -64,7 +65,8 @@ export function TranscriptPanel() {
               Browser audio is streamed to FastAPI at {socketUrl} and transcribed by Deepgram in real time.
             </p>
           </div>
-          <span className={`rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-[0.24em] ${micBadgeTone}`}>
+          <span className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-[0.24em] ${micBadgeTone}`}>
+            <span className={`h-2.5 w-2.5 rounded-full ${isListening ? 'bg-emerald-500 pulse-bleed' : 'bg-slate-400'}`} />
             {micBadge}
           </span>
         </div>
@@ -76,7 +78,7 @@ export function TranscriptPanel() {
               void startRecording();
             }}
             disabled={isRecording}
-            className="rounded-full border border-slate-900 bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+            className="rounded-full border border-slate-900 bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition-all duration-200 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
           >
             Start Recording
           </button>
@@ -86,7 +88,7 @@ export function TranscriptPanel() {
               void stopRecording();
             }}
             disabled={!isRecording}
-            className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+            className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition-all duration-200 hover:border-slate-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
           >
             Stop Recording
           </button>

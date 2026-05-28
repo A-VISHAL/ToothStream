@@ -7,6 +7,8 @@ interface StatusBarProps {
   socketUrl: string;
   lastPayload: PerioPayload | null;
   transcriptionError: string | null;
+  soundEnabled: boolean;
+  setSoundEnabled: React.Dispatch<React.SetStateAction<boolean>>;
 }
 
 function statusTone(state: ConnectionState): string {
@@ -42,7 +44,15 @@ function statusLabel(state: ConnectionState, transcriptionError: string | null):
   }
 }
 
-export function StatusBar({ connectionState, latencyMs, socketUrl, lastPayload, transcriptionError }: StatusBarProps) {
+export function StatusBar({
+  connectionState,
+  latencyMs,
+  socketUrl,
+  lastPayload,
+  transcriptionError,
+  soundEnabled,
+  setSoundEnabled,
+}: StatusBarProps) {
   const debugPayload = lastPayload ? JSON.stringify(lastPayload, null, 2) : 'No JSON payload received yet.';
 
   return (
@@ -78,6 +88,26 @@ export function StatusBar({ connectionState, latencyMs, socketUrl, lastPayload, 
                   ? transcriptionError || 'Reconnecting to backend'
                   : 'Backend disconnected'}
             </p>
+          </div>
+
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-400">Sound</p>
+                <p className="mt-2 font-medium text-slate-800">{soundEnabled ? 'ON' : 'OFF'}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSoundEnabled((previous) => !previous)}
+                className={`rounded-full border px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.22em] transition-all duration-200 ${
+                  soundEnabled
+                    ? 'border-cyan-200 bg-cyan-50 text-cyan-800 hover:bg-cyan-100'
+                    : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                }`}
+              >
+                {soundEnabled ? 'Mute' : 'Enable'}
+              </button>
+            </div>
           </div>
         </div>
       </section>
