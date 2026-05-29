@@ -77,7 +77,8 @@ function createTonePlan(kind: SoundTone): Array<{ frequency: number; duration: n
 }
 
 function isUserAudioAllowed(): boolean {
-  return typeof window !== 'undefined' && window.navigator.userActivation?.hasBeenActive === true;
+  const nav = window.navigator as Navigator & { userActivation?: { hasBeenActive: boolean } };
+  return typeof window !== 'undefined' && nav.userActivation?.hasBeenActive === true;
 }
 
 async function playTone(kind: SoundTone, enabled: boolean, audioContextRef: React.MutableRefObject<AudioContext | null>) {
