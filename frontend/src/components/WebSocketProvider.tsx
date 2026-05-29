@@ -3,6 +3,9 @@ import { parseTranscriptToPayload } from './transcriptParser';
 import { useDeepgramTranscription } from './useDeepgramTranscription';
 import type {
   CommandFeedback,
+  DebugEventKind,
+  DebugTimelineEvent,
+  DebugTranscriptEntry,
   PerioChartContextValue,
   PerioPayload,
   ToothState,
@@ -12,6 +15,9 @@ import type {
 } from '../types';
 
 const SITE_COUNT = 3;
+const DEBUG_MAX_TIMELINE = 120;
+const DEBUG_MAX_ACTIONS = 80;
+const DEBUG_MAX_STREAM = 40;
 
 const PerioChartContext = createContext<PerioChartContextValue | undefined>(undefined);
 
@@ -140,6 +146,11 @@ interface ChartSnapshot {
   lastPayload: PerioPayload | null;
 }
 
+interface DebugHooks {
+  timeline: (kind: DebugEventKind, message: string, detail?: string) => void;
+  action: (lines: string[]) => void;
+}
+
 function normalizeSurface(surface?: string): ToothSurface {
   if (!surface) {
     return 'buccal';
@@ -210,7 +221,8 @@ function ingestPayload(
   updateActiveRef: (tooth: number | null, surface: ToothSurface | null, siteIndex: number | null) => void,
   historyStackRef: React.MutableRefObject<ChartSnapshot[]>,
   flashFeedback: (feedback: CommandFeedback) => void,
-  playCommandSound: (kind: SoundTone) => void
+  playCommandSound: (kind: SoundTone) => void,
+  debugHooks?: DebugHooks
 ) {
   const hydrated = hydratePayload(payload);
   const receivedAt = Date.now();
@@ -235,6 +247,7 @@ function ingestPayload(
   const siteIndex = clampSiteIndex(hydrated.siteIndex ?? fallbackSiteIndex ?? undefined);
 
   if (!hasChartSignal || toothNumber === null) {
+    debugHooks?.timeline('parser', 'payload dropped', typeof hydrated.transcript === 'string' ? hydrated.transcript : undefined);
     console.warn('[Perio UI] dropping payload — no actionable chart signal or no target tooth', {
       hasChartSignal,
       toothNumber,
@@ -283,6 +296,12 @@ function ingestPayload(
       setCurrentSurface(surface);
       setActiveSiteIndex(siteIndex);
       updateActiveRef(toothNumber, surface, siteIndex);
+      debugHooks?.timeline('state', 'tooth selected', `tooth=${toothNumber} surface=${surface}`);
+      debugHooks?.action([
+        `selected tooth ${toothNumber}`,
+        `surface=${surface}`,
+        `site=${siteIndex}`,
+      ]);
 
       // Still record the selection in the transcript list for visibility.
       setTranscriptEntries((previous) => {
@@ -317,6 +336,14 @@ function ingestPayload(
       setCurrentSurface(nextCursor.surface);
       setActiveSiteIndex(nextCursor.siteIndex);
       updateActiveRef(nextCursor.tooth, nextCursor.surface, nextCursor.siteIndex);
+      debugHooks?.timeline('action', 'triplet committed', `tooth=${toothNumber} surface=${surface} depth=${hydrated.depth?.join('/') ?? 'n/a'}`);
+      debugHooks?.action([
+        `selected tooth ${toothNumber}`,
+        `MB=${hydrated.depth?.[0] ?? 0}`,
+        `B=${hydrated.depth?.[1] ?? 0}`,
+        `DB=${hydrated.depth?.[2] ?? 0}`,
+        `bleeding=${Boolean(hydrated.bleeding)}`,
+      ]);
     }
 
     // Handle navigation commands that explicitly request cursor moves even when
@@ -329,6 +356,8 @@ function ingestPayload(
       setCurrentSurface(cmdNextCursor.surface);
       setActiveSiteIndex(cmdNextCursor.siteIndex);
       updateActiveRef(cmdNextCursor.tooth, cmdNextCursor.surface, cmdNextCursor.siteIndex);
+      debugHooks?.timeline('state', 'navigation command', hydrated.command);
+      debugHooks?.action([`command=${hydrated.command}`, `cursor->tooth ${cmdNextCursor.tooth ?? 'none'}`]);
     }
 
   // Also push a debug transcript entry with the JSON payload for end-to-end visibility
@@ -431,6 +460,7 @@ function ingestPayload(
   }
 
   if (hydrated.bleeding) {
+    debugHooks?.timeline('action', 'bleeding set', `tooth=${toothNumber} surface=${surface}`);
     flashFeedback({ kind: 'bleeding', message: 'BLEEDING SET' });
     playCommandSound('bleeding');
   }
@@ -461,6 +491,12 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
   const [teeth, setTeeth] = useState<Record<number, ToothState>>(createInitialTeethState);
   const [commandFeedback, setCommandFeedback] = useState<CommandFeedback | null>(null);
   const [soundEnabled, setSoundEnabled] = useState(true);
+  const debugAvailable = process.env.NODE_ENV !== 'production' || process.env.REACT_APP_DEBUG_PANEL === '1';
+  const [debugCollapsed, setDebugCollapsed] = useState(true);
+  const [debugFinalTranscript, setDebugFinalTranscript] = useState('');
+  const [debugStream, setDebugStream] = useState<DebugTranscriptEntry[]>([]);
+  const [debugActionLog, setDebugActionLog] = useState<string[]>([]);
+  const [debugTimeline, setDebugTimeline] = useState<DebugTimelineEvent[]>([]);
   const processedTranscriptIdsRef = useRef<Set<string>>(new Set());
   const lastActiveToothRef = useRef<number | null>(1);
   const lastActiveSurfaceRef = useRef<ToothSurface | null>('buccal');
@@ -468,6 +504,7 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
   const historyStackRef = useRef<ChartSnapshot[]>([]);
   const feedbackTimerRef = useRef<number | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
+  const lastInterimLoggedRef = useRef(0);
 
   const updateActiveRef = (tooth: number | null, surface: ToothSurface | null, siteIndex: number | null) => {
     lastActiveToothRef.current = tooth;
@@ -495,6 +532,57 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
     [soundEnabled]
   );
 
+  const pushDebugTimeline = useCallback(
+    (kind: DebugEventKind, message: string, detail?: string) => {
+      if (!debugAvailable) {
+        return;
+      }
+
+      setDebugTimeline((previous) => [
+        {
+          id: `dbg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          timestamp: Date.now(),
+          kind,
+          message,
+          detail,
+        },
+        ...previous,
+      ].slice(0, DEBUG_MAX_TIMELINE));
+    },
+    [debugAvailable]
+  );
+
+  const pushDebugAction = useCallback(
+    (lines: string[]) => {
+      if (!debugAvailable || lines.length === 0) {
+        return;
+      }
+
+      const stamped = `${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })} ${lines.join(' | ')}`;
+      setDebugActionLog((previous) => [stamped, ...previous].slice(0, DEBUG_MAX_ACTIONS));
+    },
+    [debugAvailable]
+  );
+
+  const pushDebugStream = useCallback(
+    (label: 'INTERIM' | 'FINAL', text: string) => {
+      if (!debugAvailable || !text.trim()) {
+        return;
+      }
+
+      setDebugStream((previous) => [
+        {
+          id: `dbg-stream-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          label,
+          text: text.trim(),
+          timestamp: Date.now(),
+        },
+        ...previous,
+      ].slice(0, DEBUG_MAX_STREAM));
+    },
+    [debugAvailable]
+  );
+
   const applyUndo = useCallback(() => {
     const snapshot = historyStackRef.current.pop();
 
@@ -516,7 +604,7 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
       restoredSurface: snapshot.currentSurface,
       restoredSiteIndex: snapshot.activeSiteIndex,
     });
-  }, [flashFeedback]);
+  }, [flashFeedback, playCommandSound]);
 
   useEffect(() => {
     console.debug('[Perio UI] chart rerendered', {
@@ -547,6 +635,9 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
     processedTranscriptIdsRef.current.add(latestFinal.id);
 
     const normalizedTranscript = latestFinal.text.trim().toLowerCase();
+    setDebugFinalTranscript(latestFinal.text.trim());
+    pushDebugStream('FINAL', latestFinal.text);
+    pushDebugTimeline('transcript', 'final transcript received', latestFinal.text.trim());
 
     console.info('[Perio UI] final transcript received', {
       rawTranscript: latestFinal.text,
@@ -554,6 +645,8 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
     });
 
     if (normalizedTranscript === 'undo') {
+      pushDebugTimeline('action', 'undo command received');
+      pushDebugAction(['ACTION:', 'undo applied']);
       applyUndo();
       setTranscriptEntries((previous) => [
         {
@@ -570,6 +663,7 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
 
     const payload = parseTranscriptToPayload(latestFinal.text);
     if (!payload) {
+      pushDebugTimeline('parser', 'no clinical payload parsed', latestFinal.text.trim());
       // No clinical payload detected — still preserve the raw final transcript
       console.info('[Perio UI] final transcript (no payload)', { text: latestFinal.text });
 
@@ -589,6 +683,7 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
     }
 
     console.info('[Perio UI] parsed payload from final transcript', { payload });
+    pushDebugTimeline('parser', 'payload parsed', JSON.stringify(payload));
 
     if (payload.tooth !== undefined && Array.isArray(payload.depth) && payload.depth.length === SITE_COUNT) {
       flashFeedback({
@@ -621,9 +716,26 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
       updateActiveRef,
       historyStackRef,
       flashFeedback,
-      playCommandSound
+      playCommandSound,
+      {
+        timeline: pushDebugTimeline,
+        action: pushDebugAction,
+      }
     );
-  }, [setTeeth, transcription.segments, currentTooth, currentSurface, activeSiteIndex, lastPayload, applyUndo, flashFeedback, playCommandSound]);
+  }, [
+    setTeeth,
+    transcription.segments,
+    currentTooth,
+    currentSurface,
+    activeSiteIndex,
+    lastPayload,
+    applyUndo,
+    flashFeedback,
+    playCommandSound,
+    pushDebugAction,
+    pushDebugStream,
+    pushDebugTimeline,
+  ]);
 
   useEffect(() => {
     if (!soundEnabled && audioContextRef.current) {
@@ -638,8 +750,48 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (transcription.interimTranscript) {
       console.debug('[Perio UI] interim transcript update', transcription.interimTranscript);
+      const now = Date.now();
+      if (now - lastInterimLoggedRef.current > 1000) {
+        pushDebugStream('INTERIM', transcription.interimTranscript);
+        pushDebugTimeline('transcript', 'interim transcript update', transcription.interimTranscript);
+        lastInterimLoggedRef.current = now;
+      }
     }
-  }, [transcription.interimTranscript]);
+  }, [pushDebugStream, pushDebugTimeline, transcription.interimTranscript]);
+
+  const parserMode = useMemo(() => {
+    if (!transcription.isRecording) {
+      return 'idle';
+    }
+    if (lastPayload && Array.isArray(lastPayload.depth) && lastPayload.depth.length === SITE_COUNT) {
+      return 'commit';
+    }
+    if (lastPayload && typeof lastPayload.tooth === 'number' && !Array.isArray(lastPayload.depth)) {
+      return 'selection';
+    }
+    return 'probing';
+  }, [lastPayload, transcription.isRecording]);
+
+  const parserExpectedInput = useMemo(() => {
+    if (!transcription.isRecording) {
+      return 'start recording';
+    }
+    if (currentTooth === null) {
+      return 'tooth number';
+    }
+    return 'triplet';
+  }, [currentTooth, transcription.isRecording]);
+
+  const parserStatus = useMemo(() => {
+    if (transcription.error) {
+      return 'error';
+    }
+    return connectionState;
+  }, [connectionState, transcription.error]);
+
+  const toggleDebugCollapsed = useCallback(() => {
+    setDebugCollapsed((previous) => !previous);
+  }, []);
 
   const value = useMemo<PerioChartContextValue>(
     () => ({
@@ -660,6 +812,23 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
       startRecording: transcription.startRecording,
       stopRecording: transcription.stopRecording,
       teeth,
+      debug: {
+        available: debugAvailable,
+        collapsed: debugCollapsed,
+        interimTranscript: transcription.interimTranscript,
+        finalTranscript: debugFinalTranscript,
+        stream: debugStream,
+        parserState: {
+          tooth: currentTooth,
+          surface: currentSurface,
+          mode: parserMode,
+          expectedInput: parserExpectedInput,
+          status: parserStatus,
+        },
+        actionLog: debugActionLog,
+        timeline: debugTimeline,
+      },
+      toggleDebugCollapsed,
     }),
     [
       activeSiteIndex,
@@ -678,6 +847,16 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
       transcription.isRecording,
       transcription.startRecording,
       transcription.stopRecording,
+      debugAvailable,
+      debugActionLog,
+      debugCollapsed,
+      debugFinalTranscript,
+      debugStream,
+      debugTimeline,
+      parserExpectedInput,
+      parserMode,
+      parserStatus,
+      toggleDebugCollapsed,
     ]
   );
 

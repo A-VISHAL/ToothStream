@@ -1,6 +1,7 @@
 import React from 'react';
 import './App.css';
 import { PerioChart } from './components/PerioChart';
+import { DebugPanel } from './components/DebugPanel';
 import { StatusBar } from './components/StatusBar';
 import { TranscriptPanel } from './components/TranscriptPanel';
 import { WebSocketProvider, usePerioChart } from './components/WebSocketProvider';
@@ -108,6 +109,8 @@ function Dashboard() {
           </section>
         </main>
       </div>
+
+      <DebugPanel />
     </div>
   );
 }

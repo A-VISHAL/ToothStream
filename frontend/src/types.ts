@@ -53,6 +53,42 @@ export interface TranscriptEntry {
   isFinal?: boolean;
 }
 
+export type DebugEventKind = 'transcript' | 'parser' | 'state' | 'action' | 'socket';
+
+export interface DebugTranscriptEntry {
+  id: string;
+  text: string;
+  timestamp: number;
+  label: 'INTERIM' | 'FINAL';
+}
+
+export interface DebugTimelineEvent {
+  id: string;
+  timestamp: number;
+  kind: DebugEventKind;
+  message: string;
+  detail?: string;
+}
+
+export interface DebugParserState {
+  tooth: number | null;
+  surface: ToothSurface | null;
+  mode: string;
+  expectedInput: string;
+  status: string;
+}
+
+export interface DebugPanelState {
+  available: boolean;
+  collapsed: boolean;
+  interimTranscript: string;
+  finalTranscript: string;
+  stream: DebugTranscriptEntry[];
+  parserState: DebugParserState;
+  actionLog: string[];
+  timeline: DebugTimelineEvent[];
+}
+
 export type LiveTranscriptState = 'disconnected' | 'connecting' | 'connected' | 'listening' | 'reconnecting' | 'error';
 
 export interface PerioChartContextValue {
@@ -73,4 +109,6 @@ export interface PerioChartContextValue {
   startRecording: () => Promise<void>;
   stopRecording: () => Promise<void>;
   teeth: Record<number, ToothState>;
+  debug: DebugPanelState;
+  toggleDebugCollapsed: () => void;
 }
