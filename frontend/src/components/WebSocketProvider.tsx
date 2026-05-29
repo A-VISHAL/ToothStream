@@ -268,7 +268,74 @@ function ingestPayload(
     resolvedSiteIndex: siteIndex,
   });
 
-  const shouldCommitDepths = Array.isArray(hydrated.depth) && hydrated.depth.length === SITE_COUNT;
+    const shouldCommitDepths = Array.isArray(hydrated.depth) && hydrated.depth.length === SITE_COUNT;
+    const explicitTooth = typeof hydrated.tooth === 'number';
+    const navigationCommands = new Set(['skip', 'resume', 'next', 'previous']);
+
+    // If caller explicitly selected a tooth (e.g. "tooth 5") without providing
+    // a triplet, treat this as a selection for subsequent probing rather than as
+    // a commit that advances the cursor. This prevents accidental cursor advances
+    // and enables expectation-based parsing for the next final transcript.
+    if (explicitTooth && !shouldCommitDepths && !hydrated.command) {
+      console.info('[Perio UI] explicit tooth selection — setting active tooth (no commit)', { toothNumber, surface, siteIndex });
+
+      setCurrentTooth(toothNumber);
+      setCurrentSurface(surface);
+      setActiveSiteIndex(siteIndex);
+      updateActiveRef(toothNumber, surface, siteIndex);
+
+      // Now expect a triplet to follow; do not advance cursor until committed.
+      expectingTripletRef.current = true;
+
+      // Still record the selection in the transcript list for visibility.
+      setTranscriptEntries((previous) => {
+        const nextEntry = {
+          id: `socket-select-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          text: hydrated.transcript?.trim() || `Select tooth ${toothNumber}`,
+          timestamp: Date.now(),
+          source: 'socket' as const,
+          isFinal: true,
+        };
+
+        return [nextEntry, ...previous].slice(0, 12);
+      });
+
+      return;
+    }
+
+    // If a triplet is present, commit it to the resolved tooth (explicit or fallback).
+    if (shouldCommitDepths) {
+      // clear expectation flag — we've received the triplet we were waiting for
+      expectingTripletRef.current = false;
+
+      const nextCursor = getNextCursorAfterCommit(toothNumber);
+
+      console.info('[Perio UI] state update queued (commit)', {
+        toothNumber,
+        surface,
+        siteIndex,
+        reusedFallback: typeof hydrated.tooth !== 'number',
+        nextCursor,
+      });
+
+      // Only advance the cursor after a committed triplet
+      setCurrentTooth(nextCursor.tooth);
+      setCurrentSurface(nextCursor.surface);
+      setActiveSiteIndex(nextCursor.siteIndex);
+      updateActiveRef(nextCursor.tooth, nextCursor.surface, nextCursor.siteIndex);
+    }
+
+    // Handle navigation commands that explicitly request cursor moves even when
+    // no triplet is present.
+    if (!shouldCommitDepths && hydrated.command && navigationCommands.has(hydrated.command)) {
+      const cmdNextCursor = getNextCursorAfterCommit(toothNumber);
+      console.info('[Perio UI] navigation command — advancing cursor', { command: hydrated.command, cmdNextCursor });
+
+      setCurrentTooth(cmdNextCursor.tooth);
+      setCurrentSurface(cmdNextCursor.surface);
+      setActiveSiteIndex(cmdNextCursor.siteIndex);
+      updateActiveRef(cmdNextCursor.tooth, cmdNextCursor.surface, cmdNextCursor.siteIndex);
+    }
 
   const nextCursor = getNextCursorAfterCommit(toothNumber);
 

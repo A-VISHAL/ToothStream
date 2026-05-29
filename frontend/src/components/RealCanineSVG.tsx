@@ -1,28 +1,40 @@
 import React from 'react';
 import type { ToothAnatomyProps } from './RealIncisorSVG';
 
-export function RealCanineSVG({ fill, stroke, shadowId, missing, implant, isActive }: ToothAnatomyProps) {
+export function RealCanineSVG({ fill, stroke, shadowId, missing, implant, isActive, variant, mirror }: ToothAnatomyProps) {
+  const maxillaryOutline =
+    'M30 21C32 14 41 9 50 9C59 9 68 14 70 21C72 28 72 35 69 42C66 48 63 52 60 56C56 61 54 68 53 77C51 90 55 106 60 124C63 136 60 147 50 150C40 147 37 136 40 124C45 106 49 90 47 77C46 68 44 61 40 56C37 52 34 48 31 42C28 35 28 28 30 21Z';
+  const mandibularOutline =
+    'M33 22C35 16 42 12 50 12C58 12 65 16 67 22C69 29 68 35 66 42C64 49 61 54 58 59C55 64 53 70 52 78C50 92 53 111 56 128C58 141 56 150 50 150C44 150 42 141 44 128C47 111 50 92 48 78C47 70 45 64 42 59C39 54 36 49 34 42C32 35 31 29 33 22Z';
+  const outline = variant === 'canine-mandibular' ? mandibularOutline : maxillaryOutline;
+  const cej = variant === 'canine-mandibular' ? 'M41 54C45 58 55 58 59 54' : 'M39 57C44 62 56 62 61 57';
+
   return (
-    <g>
+    <g transform={mirror ? 'translate(100 0) scale(-1 1)' : undefined}>
+      <defs>
+        <clipPath id={`${shadowId}-canine-clip`}>
+          <path d={outline} />
+        </clipPath>
+      </defs>
+
       <path
-        d="M29 22C31 15 40 10 50 10C60 10 69 15 71 22C73 29 72 35 69 41C66 46 63 49 60 53C57 57 55 62 54 68C52 79 57 95 63 113C68 129 68 145 50 150C32 145 32 129 37 113C43 95 48 79 46 68C45 62 43 57 40 53C37 49 34 46 31 41C28 35 27 29 29 22Z"
+        d={outline}
         fill={missing ? '#eee8dd' : fill}
         stroke={missing ? '#94a3b8' : stroke}
-        strokeWidth={1.55}
+        strokeWidth={1.52}
         strokeLinejoin="round"
         strokeDasharray={missing ? '5 4' : undefined}
         filter={`url(#${shadowId})`}
       />
-      <path d="M34 18C40 21 60 21 66 18" fill="none" stroke="#c4b08d" strokeWidth="1.55" strokeLinecap="round" opacity="0.7" />
-      <path d="M41 28C45 31 55 31 59 28" fill="none" stroke="#f7f1e7" strokeWidth="1.2" strokeLinecap="round" />
-      <path d="M50 16L50 136" fill="none" stroke="#b99c74" strokeWidth="1.15" strokeLinecap="round" />
-      <path d="M46 40L50 15L54 40" fill="none" stroke="#d7bf95" strokeWidth="1.1" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M43 60C47 63 53 63 57 60" fill="none" stroke="#b99c74" strokeWidth="0.95" strokeLinecap="round" opacity="0.8" />
-      <path d="M43 98C46 104 54 104 57 98" fill="none" stroke="#b99c74" strokeWidth="0.95" strokeLinecap="round" opacity="0.8" />
-      <path d="M38 86C43 91 57 91 62 86" fill="none" stroke="#d4b98a" strokeWidth="1.05" strokeLinecap="round" opacity="0.9" />
-      <path d="M40 52C44 48 56 48 60 52" fill="none" stroke="#d7bf95" strokeWidth="1" strokeLinecap="round" opacity="0.85" />
-      <path d="M47 112C48 121 45 134 43 143" fill="none" stroke="#d1dbe7" strokeWidth="0.95" strokeLinecap="round" />
-      <path d="M53 112C52 121 55 134 57 143" fill="none" stroke="#d1dbe7" strokeWidth="0.95" strokeLinecap="round" />
+      {!missing ? <rect x="18" y="56" width="64" height="102" fill="#efdfc6" clipPath={`url(#${shadowId}-canine-clip)`} opacity="0.95" /> : null}
+
+      <path d={cej} fill="none" stroke="#7d8794" strokeWidth="1.04" strokeLinecap="round" opacity="0.86" />
+      <path d="M36 20C41 24 59 24 64 20" fill="none" stroke="#d3bd9a" strokeWidth="1.2" strokeLinecap="round" opacity="0.72" />
+      <path d="M46 41L50 16L54 41" fill="none" stroke="#d4bc97" strokeWidth="1.08" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M50 57V141" fill="none" stroke="#c8ab82" strokeWidth="1" strokeLinecap="round" />
+      <path d="M43 84C46 90 54 90 57 84" fill="none" stroke="#ceb088" strokeWidth="0.85" strokeLinecap="round" opacity="0.88" />
+      <path d="M44 116C46 125 44 136 42 144" fill="none" stroke="#d2b995" strokeWidth="0.88" strokeLinecap="round" />
+      <path d="M56 116C54 125 56 136 58 144" fill="none" stroke="#d2b995" strokeWidth="0.88" strokeLinecap="round" />
 
       {implant ? (
         <g transform="translate(50, 82)">
@@ -33,7 +45,7 @@ export function RealCanineSVG({ fill, stroke, shadowId, missing, implant, isActi
         </g>
       ) : null}
 
-      {isActive ? <circle cx="50" cy="79" r="38" fill="none" stroke="#38bdf8" strokeOpacity="0.18" strokeWidth="1.1" strokeDasharray="4 6" /> : null}
+      {isActive ? <circle cx="50" cy="82" r="40" fill="none" stroke="#0ea5e9" strokeOpacity="0.26" strokeWidth="1.05" strokeDasharray="4 6" /> : null}
     </g>
   );
 }

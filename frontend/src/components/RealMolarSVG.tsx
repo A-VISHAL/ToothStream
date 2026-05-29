@@ -1,29 +1,52 @@
 import React from 'react';
 import type { ToothAnatomyProps } from './RealIncisorSVG';
 
-export function RealMolarSVG({ fill, stroke, shadowId, missing, implant, isActive }: ToothAnatomyProps) {
+export function RealMolarSVG({ fill, stroke, shadowId, missing, implant, isActive, variant, mirror }: ToothAnatomyProps) {
+  const firstOutline =
+    'M18 28C20 17 30 10 42 10H58C70 10 80 17 82 28C84 38 82 48 79 58C76 69 76 80 79 92C82 104 85 119 82 132C79 144 67 150 50 150C33 150 21 144 18 132C15 119 18 104 21 92C24 80 24 69 21 58C18 48 16 38 18 28Z';
+  const secondOutline =
+    'M21 29C23 19 31 12 42 12H58C69 12 77 19 79 29C81 38 79 47 77 56C75 65 75 76 77 86C79 98 82 113 80 126C78 140 67 149 50 149C33 149 22 140 20 126C18 113 21 98 23 86C25 76 25 65 23 56C21 47 19 38 21 29Z';
+  const thirdOutline =
+    'M24 30C26 22 32 16 41 16H59C68 16 74 22 76 30C78 39 76 47 74 55C72 64 72 74 74 83C76 94 78 107 77 118C76 133 66 145 50 145C34 145 24 133 23 118C22 107 24 94 26 83C28 74 28 64 26 55C24 47 22 39 24 30Z';
+  const outline = variant === 'molar-first' ? firstOutline : variant === 'molar-second' ? secondOutline : thirdOutline;
+
   return (
-    <g>
+    <g transform={mirror ? 'translate(100 0) scale(-1 1)' : undefined}>
+      <defs>
+        <clipPath id={`${shadowId}-molar-clip`}>
+          <path d={outline} />
+        </clipPath>
+      </defs>
+
       <path
-        d="M18 28C20 17 29 10 41 10H59C71 10 80 17 82 28C84 39 82 49 79 58C77 64 76 70 77 76C79 84 83 93 84 104C85 118 80 135 68 144C60 150 53 150 50 150C47 150 40 150 32 144C20 135 15 118 16 104C17 93 21 84 23 76C24 70 23 64 21 58C18 49 16 39 18 28Z"
+        d={outline}
         fill={missing ? '#eee8dd' : fill}
         stroke={missing ? '#94a3b8' : stroke}
-        strokeWidth={1.55}
+        strokeWidth={1.52}
         strokeLinejoin="round"
         strokeDasharray={missing ? '5 4' : undefined}
         filter={`url(#${shadowId})`}
       />
-      <path d="M28 18C35 22 41 24 50 24C59 24 65 22 72 18" fill="none" stroke="#c4b08d" strokeWidth="1.55" strokeLinecap="round" opacity="0.7" />
-      <path d="M31 31C37 34 43 36 50 36C57 36 63 34 69 31" fill="none" stroke="#f7f1e7" strokeWidth="1.2" strokeLinecap="round" />
-      <path d="M34 43C40 39 45 37 50 37C55 37 60 39 66 43" fill="none" stroke="#d1e4f5" strokeWidth="1.05" strokeLinecap="round" />
-      <path d="M24 55C31 51 39 49 50 49C61 49 69 51 76 55" fill="none" stroke="#d7bf95" strokeWidth="1.05" strokeLinecap="round" opacity="0.85" />
-      <path d="M50 16V120" fill="none" stroke="#b99c74" strokeWidth="1.15" strokeLinecap="round" />
-      <path d="M32 61C39 67 44 70 50 70C56 70 61 67 68 61" fill="none" stroke="#b99c74" strokeWidth="0.95" strokeLinecap="round" opacity="0.8" />
-      <path d="M30 88C38 93 44 96 50 96C56 96 62 93 70 88" fill="none" stroke="#b99c74" strokeWidth="0.95" strokeLinecap="round" opacity="0.8" />
-      <path d="M30 100C38 104 44 106 50 106C56 106 62 104 70 100" fill="none" stroke="#c7ddf2" strokeWidth="1" strokeLinecap="round" />
-      <path d="M39 116C42 123 42 136 41 144" fill="none" stroke="#d1dbe7" strokeWidth="1" strokeLinecap="round" />
-      <path d="M50 114C50 124 50 138 50 150" fill="none" stroke="#d1dbe7" strokeWidth="1" strokeLinecap="round" />
-      <path d="M61 116C58 123 58 136 59 144" fill="none" stroke="#d1dbe7" strokeWidth="1" strokeLinecap="round" />
+      {!missing ? <rect x="12" y="62" width="76" height="98" fill="#efdfc7" clipPath={`url(#${shadowId}-molar-clip)`} opacity="0.95" /> : null}
+
+      <path d="M28 20C34 24 42 27 50 27C58 27 66 24 72 20" fill="none" stroke="#d3bd9a" strokeWidth="1.2" strokeLinecap="round" opacity="0.72" />
+      <path d="M30 63C36 68 44 70 50 70C56 70 64 68 70 63" fill="none" stroke="#7d8794" strokeWidth="1.05" strokeLinecap="round" opacity="0.86" />
+      <path d="M32 35C38 39 44 41 50 41C56 41 62 39 68 35" fill="none" stroke="#e9f1f8" strokeWidth="1" strokeLinecap="round" />
+      <path d="M34 46C39 42 44 40 50 40C56 40 61 42 66 46" fill="none" stroke="#d4bc97" strokeWidth="1" strokeLinecap="round" />
+      <path d="M50 66V124" fill="none" stroke="#c8ab82" strokeWidth="1" strokeLinecap="round" />
+      <path d="M31 89C38 96 44 99 50 99C56 99 62 96 69 89" fill="none" stroke="#ceb088" strokeWidth="0.85" strokeLinecap="round" opacity="0.88" />
+      {variant === 'molar-third' ? (
+        <>
+          <path d="M44 113C45 122 44 133 43 142" fill="none" stroke="#d2b995" strokeWidth="0.88" strokeLinecap="round" />
+          <path d="M56 113C55 122 56 133 57 142" fill="none" stroke="#d2b995" strokeWidth="0.88" strokeLinecap="round" />
+        </>
+      ) : (
+        <>
+          <path d="M39 113C42 122 42 134 41 144" fill="none" stroke="#d2b995" strokeWidth="0.88" strokeLinecap="round" />
+          <path d="M50 112C50 123 50 137 50 149" fill="none" stroke="#d2b995" strokeWidth="0.9" strokeLinecap="round" />
+          <path d="M61 113C58 122 58 134 59 144" fill="none" stroke="#d2b995" strokeWidth="0.88" strokeLinecap="round" />
+        </>
+      )}
 
       {implant ? (
         <g transform="translate(50, 82)">
@@ -34,7 +57,7 @@ export function RealMolarSVG({ fill, stroke, shadowId, missing, implant, isActiv
         </g>
       ) : null}
 
-      {isActive ? <circle cx="50" cy="79" r="39" fill="none" stroke="#38bdf8" strokeOpacity="0.18" strokeWidth="1.1" strokeDasharray="4 6" /> : null}
+      {isActive ? <circle cx="50" cy="82" r="41" fill="none" stroke="#0ea5e9" strokeOpacity="0.26" strokeWidth="1.05" strokeDasharray="4 6" /> : null}
     </g>
   );
 }

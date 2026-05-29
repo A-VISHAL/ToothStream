@@ -16,31 +16,32 @@ interface PerioArchProps {
 }
 
 const ARCH_WIDTH = 1600;
-const ARCH_HEIGHT = 460;
-const START_X = 92;
-const END_X = 1508;
-const AMPLITUDE = 40;
+const ARCH_HEIGHT = 500;
+const START_X = 84;
+const END_X = 1516;
+const AMPLITUDE = 46;
 
 function archY(arch: ArchSide, t: number): number {
   const arc = Math.sin(Math.PI * t) * AMPLITUDE;
-  return arch === 'maxillary' ? 122 + arc : 286 - arc;
+  const posteriorDrop = Math.pow(Math.abs(t - 0.5), 1.45) * 32;
+  return arch === 'maxillary' ? 140 + arc + posteriorDrop : 302 - arc - posteriorDrop;
 }
 
 function archRotation(arch: ArchSide, t: number): number {
-  const tilt = (t - 0.5) * 16;
+  const tilt = (t - 0.5) * 22;
   return arch === 'maxillary' ? tilt : -tilt;
 }
 
 function archGuidePath(arch: ArchSide): string {
   return arch === 'maxillary'
-    ? 'M110 130C370 78 1230 78 1490 130'
-    : 'M110 276C370 328 1230 328 1490 276';
+    ? 'M106 146C360 78 1240 78 1494 146'
+    : 'M106 294C360 362 1240 362 1494 294';
 }
 
 function archBandPath(arch: ArchSide): string {
   return arch === 'maxillary'
-    ? 'M140 100C390 44 1210 44 1460 100'
-    : 'M140 306C390 362 1210 362 1460 306';
+    ? 'M136 114C390 44 1210 44 1464 114'
+    : 'M136 326C390 396 1210 396 1464 326';
 }
 
 function sectionLabel(arch: ArchSide): string {
@@ -54,7 +55,7 @@ function BackgroundGuideLayer({ arch }: { arch: ArchSide }) {
   return (
     <g pointerEvents="none" opacity="0.72">
       <path
-        d={arch === 'maxillary' ? 'M100 120C360 72 1240 72 1500 120' : 'M100 286C360 334 1240 334 1500 286'}
+        d={arch === 'maxillary' ? 'M98 140C360 76 1240 76 1502 140' : 'M98 300C360 364 1240 364 1502 300'}
         fill="none"
         stroke={contourStroke}
         strokeWidth="2.1"
@@ -62,7 +63,7 @@ function BackgroundGuideLayer({ arch }: { arch: ArchSide }) {
         strokeDasharray="10 12"
       />
       <path
-        d={arch === 'maxillary' ? 'M128 108C390 58 1210 58 1472 108' : 'M128 298C390 348 1210 348 1472 298'}
+        d={arch === 'maxillary' ? 'M126 124C390 58 1210 58 1474 124' : 'M126 316C390 382 1210 382 1474 316'}
         fill="none"
         stroke={guideStroke}
         strokeWidth="1.2"
@@ -70,7 +71,7 @@ function BackgroundGuideLayer({ arch }: { arch: ArchSide }) {
         opacity="0.8"
       />
       <path
-        d={arch === 'maxillary' ? 'M108 138C360 112 1240 112 1492 138' : 'M108 264C360 290 1240 290 1492 264'}
+        d={arch === 'maxillary' ? 'M108 160C360 126 1240 126 1492 160' : 'M108 276C360 310 1240 310 1492 276'}
         fill="none"
         stroke={guideStroke}
         strokeWidth="1"
@@ -122,7 +123,7 @@ export function PerioArch({ arch, title, subtitle, teeth, chart, activeTooth, ac
 
             return (
               <g className="pointer-events-none smooth-tooth" transform={`translate(${xActive} ${yActive})`}>
-                <g transform="translate(50 80)">
+                <g transform="translate(50 108)">
                   <circle cx="0" cy="0" r="54" fill="none" stroke="#0ea5e9" strokeWidth="1.2" opacity="0.12" />
                   <circle cx="0" cy="0" r="36" fill="none" stroke="#0ea5e9" strokeWidth="0.6" opacity="0.08" />
                 </g>
