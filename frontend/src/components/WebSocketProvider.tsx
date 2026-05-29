@@ -284,9 +284,6 @@ function ingestPayload(
       setActiveSiteIndex(siteIndex);
       updateActiveRef(toothNumber, surface, siteIndex);
 
-      // Now expect a triplet to follow; do not advance cursor until committed.
-      expectingTripletRef.current = true;
-
       // Still record the selection in the transcript list for visibility.
       setTranscriptEntries((previous) => {
         const nextEntry = {
@@ -305,9 +302,6 @@ function ingestPayload(
 
     // If a triplet is present, commit it to the resolved tooth (explicit or fallback).
     if (shouldCommitDepths) {
-      // clear expectation flag — we've received the triplet we were waiting for
-      expectingTripletRef.current = false;
-
       const nextCursor = getNextCursorAfterCommit(toothNumber);
 
       console.info('[Perio UI] state update queued (commit)', {
@@ -336,21 +330,6 @@ function ingestPayload(
       setActiveSiteIndex(cmdNextCursor.siteIndex);
       updateActiveRef(cmdNextCursor.tooth, cmdNextCursor.surface, cmdNextCursor.siteIndex);
     }
-
-  const nextCursor = getNextCursorAfterCommit(toothNumber);
-
-  setCurrentTooth(nextCursor.tooth);
-  setCurrentSurface(nextCursor.surface);
-  setActiveSiteIndex(nextCursor.siteIndex);
-  updateActiveRef(nextCursor.tooth, nextCursor.surface, nextCursor.siteIndex);
-
-  console.info('[Perio UI] state update queued', {
-    toothNumber,
-    surface,
-    siteIndex,
-    reusedFallback: typeof hydrated.tooth !== 'number',
-    nextCursor,
-  });
 
   // Also push a debug transcript entry with the JSON payload for end-to-end visibility
   setTranscriptEntries((previous) => {
@@ -437,12 +416,19 @@ function ingestPayload(
     return nextTeeth;
   });
 
-  console.info('[Perio UI] advance cursor', {
-    fromTooth: toothNumber,
-    toTooth: nextCursor.tooth,
-    toSurface: nextCursor.surface,
-    toSiteIndex: nextCursor.siteIndex,
-  });
+  // Log cursor advance only when a commit or explicit navigation occurred
+  const loggedNextCursor = (shouldCommitDepths || (hydrated.command && new Set(['skip', 'resume', 'next', 'previous']).has(hydrated.command)))
+    ? getNextCursorAfterCommit(toothNumber)
+    : null;
+
+  if (loggedNextCursor) {
+    console.info('[Perio UI] advance cursor', {
+      fromTooth: toothNumber,
+      toTooth: loggedNextCursor.tooth,
+      toSurface: loggedNextCursor.surface,
+      toSiteIndex: loggedNextCursor.siteIndex,
+    });
+  }
 
   if (hydrated.bleeding) {
     flashFeedback({ kind: 'bleeding', message: 'BLEEDING SET' });
@@ -609,6 +595,11 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
         kind: 'jump',
         message: `JUMP TO TOOTH ${payload.tooth}`,
       });
+      playCommandSound('jump');
+    } else if (payload.tooth !== undefined && payload.explicitTooth === true && !Array.isArray(payload.depth)) {
+      // Explicit selection without depths — provide jump feedback but do not
+      // treat this as a committed triplet.
+      flashFeedback({ kind: 'jump', message: `SELECT TOOTH ${payload.tooth}` });
       playCommandSound('jump');
     } else if (payload.bleeding) {
       flashFeedback({ kind: 'bleeding', message: 'BLEEDING SET' });

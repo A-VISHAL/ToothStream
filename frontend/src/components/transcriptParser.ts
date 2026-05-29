@@ -185,6 +185,8 @@ export function parseTranscriptToPayload(transcript: string): PerioPayload | nul
 
   return {
     tooth,
+    // whether the speaker explicitly said "tooth"
+    explicitTooth: normalizeClinicalTranscript(transcript).split(' ').includes('tooth'),
     surface,
     depth,
     bleeding,

@@ -275,6 +275,11 @@ def parse_clinical_transcript(transcript: str, *, raw_transcript: str | None = N
     if tooth is not None:
         payload["tooth"] = tooth
 
+    # Flag whether the speaker explicitly said the word "tooth" (selection)
+    # This helps consumers decide whether the utterance was intended as a
+    # selection (set active tooth) or an implicit numeric value (e.g., depths).
+    payload["explicitTooth"] = "tooth" in tokens
+
     if surface is not None:
         payload["surface"] = surface
 

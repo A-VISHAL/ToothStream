@@ -6,11 +6,15 @@ export type ConnectionState = 'connecting' | 'connected' | 'listening' | 'reconn
 
 export interface PerioPayload {
   tooth?: number;
+  explicitTooth?: boolean;
   surface?: string;
   depth?: number[];
   bleeding?: boolean;
   missing?: boolean;
   implant?: boolean;
+  command?: string;
+  cursorDirection?: 'forward' | 'backward';
+  advanceCursor?: boolean;
   siteIndex?: number;
   transcript?: string;
   normalizedTranscript?: string;
