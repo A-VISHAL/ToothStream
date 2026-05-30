@@ -167,7 +167,8 @@ function Dashboard({ doctorName, patient }: { doctorName: string; patient: Patie
 
 export default function App() {
   const [session, setSession] = useState(() => getStoredSession());
-  const [page, setPage] = useState<'login' | 'intro' | 'patient-entry' | 'dashboard'>(session.loggedIn ? 'intro' : 'login');
+  // Always show the login page first on app startup
+  const [page, setPage] = useState<'login' | 'intro' | 'patient-entry' | 'dashboard'>('login');
   const [patient, setPatient] = useState<PatientProfile | null>(null);
 
   useEffect(() => {
