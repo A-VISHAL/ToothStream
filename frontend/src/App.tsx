@@ -1,12 +1,47 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import './App.css';
+import { LoginPage } from './components/LoginPage';
 import { PerioChart } from './components/PerioChart';
 import { DebugPanel } from './components/DebugPanel';
 import { StatusBar } from './components/StatusBar';
 import { TranscriptPanel } from './components/TranscriptPanel';
 import { WebSocketProvider, usePerioChart } from './components/WebSocketProvider';
 
-function Dashboard() {
+const AUTH_STORAGE_KEY = 'trust-ai-auth-session';
+const AUTH_DOCTOR_NAME = 'Dr. Emily Carter';
+
+function getStoredSession(): { loggedIn: boolean; doctorName: string } {
+  if (typeof window === 'undefined') {
+    return { loggedIn: false, doctorName: AUTH_DOCTOR_NAME };
+  }
+
+  try {
+    const stored = window.localStorage.getItem(AUTH_STORAGE_KEY);
+
+    if (!stored) {
+      return { loggedIn: false, doctorName: AUTH_DOCTOR_NAME };
+    }
+
+    const parsed = JSON.parse(stored) as { loggedIn?: boolean; doctorName?: string };
+
+    return {
+      loggedIn: parsed.loggedIn === true,
+      doctorName: parsed.doctorName?.trim() || AUTH_DOCTOR_NAME,
+    };
+  } catch {
+    return { loggedIn: false, doctorName: AUTH_DOCTOR_NAME };
+  }
+}
+
+function persistSession(loggedIn: boolean, doctorName: string) {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  window.localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify({ loggedIn, doctorName }));
+}
+
+function Dashboard({ doctorName }: { doctorName: string }) {
   const {
     connectionState,
     latencyMs,
@@ -56,6 +91,11 @@ function Dashboard() {
               </p>
             </div>
 
+            <div className="flex items-center gap-3">
+              <span className="rounded-full border border-cyan-200 bg-cyan-50 px-4 py-2 text-xs font-semibold uppercase tracking-[0.24em] text-cyan-800">
+                {doctorName}
+              </span>
+
             <div className="flex flex-wrap items-center gap-3 text-sm">
               <span
                 className={`rounded-full border px-3 py-2 font-semibold uppercase tracking-[0.24em] ${
@@ -77,6 +117,7 @@ function Dashboard() {
                     ? 'Reconnecting'
                     : 'Backend disconnected'}
               </span>
+            </div>
             </div>
           </div>
         </header>
@@ -118,9 +159,25 @@ function Dashboard() {
 }
 
 export default function App() {
+  const [session, setSession] = useState(() => getStoredSession());
+
+  useEffect(() => {
+    persistSession(session.loggedIn, session.doctorName);
+  }, [session]);
+
+  if (!session.loggedIn) {
+    return (
+      <LoginPage
+        onSignIn={(doctorName) => {
+          setSession({ loggedIn: true, doctorName });
+        }}
+      />
+    );
+  }
+
   return (
     <WebSocketProvider>
-      <Dashboard />
+      <Dashboard doctorName={session.doctorName} />
     </WebSocketProvider>
   );
 }

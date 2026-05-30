@@ -10,6 +10,7 @@
     "@types/react": "^18.3.19",
     "@types/react-dom": "^18.3.5",
     "autoprefixer": "^10.4.21",
+    "framer-motion": "^12.40.0",
     "postcss": "^8.5.3",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
