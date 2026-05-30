@@ -178,6 +178,14 @@ function ingestPayload(
     typeof hydrated.surface === 'string' ||
     typeof hydrated.siteIndex === 'number';
 
+  console.info('COMMIT_ATTEMPT', {
+    tooth: hydrated.tooth ?? fallbackTooth,
+    surface: hydrated.surface ?? fallbackSurface ?? 'buccal',
+    siteIndex: hydrated.siteIndex ?? fallbackSiteIndex ?? 0,
+    hasTriplet,
+    toothCommitPending: toothCommitPendingRef.current,
+    awaitingAdditionalFindings: awaitingAdditionalFindingsRef.current,
+  });
   console.info('[Perio UI] payload received', hydrated);
   pushDebugTimeline('parser', 'payload received', JSON.stringify(hydrated));
   if (hasTriplet) {
@@ -245,7 +253,8 @@ function ingestPayload(
   };
 
   if (!hasChartSignal || toothNumber === null) {
-    console.warn('[Perio UI] dropping payload — no actionable chart signal or no target tooth', {
+    console.warn('COMMIT_BLOCKED', {
+      reason: 'no actionable chart signal or no target tooth',
       hasChartSignal,
       toothNumber,
       hydrated,
@@ -361,6 +370,13 @@ function ingestPayload(
   });
 
   setTeeth((previous) => {
+    console.info('CHART_WRITE', {
+      toothNumber,
+      surface,
+      hasTriplet,
+      siteIndex,
+      depth: hydrated.depth ?? null,
+    });
     const target = previous[toothNumber] ?? {
       toothNumber,
       missing: false,
@@ -461,6 +477,17 @@ function ingestPayload(
       console.info('[Perio UI] triplet committed', {
         tooth: toothNumber,
         surface,
+        depth: nextTooth[surface].depth,
+      });
+      console.info('TOOTH_STATE_AFTER', {
+        toothNumber,
+        surface,
+        state: nextTooth[surface],
+      });
+      console.info('COMMIT_SUCCESS', {
+        toothNumber,
+        surface,
+        siteIndex,
         depth: nextTooth[surface].depth,
       });
       console.info('[Perio UI] commit complete', {

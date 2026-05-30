@@ -12,35 +12,37 @@ import { WebSocketProvider, usePerioChart } from './components/WebSocketProvider
 const AUTH_STORAGE_KEY = 'trust-ai-auth-session';
 const AUTH_DOCTOR_NAME = 'Dr. Emily Carter';
 
-function getStoredSession(): { loggedIn: boolean; doctorName: string } {
+function getStoredSession(): { loggedIn: boolean; doctorName: string; remember: boolean } {
   if (typeof window === 'undefined') {
-    return { loggedIn: false, doctorName: AUTH_DOCTOR_NAME };
+    return { loggedIn: false, doctorName: AUTH_DOCTOR_NAME, remember: false };
   }
 
   try {
     const stored = window.localStorage.getItem(AUTH_STORAGE_KEY);
 
     if (!stored) {
-      return { loggedIn: false, doctorName: AUTH_DOCTOR_NAME };
+      return { loggedIn: false, doctorName: AUTH_DOCTOR_NAME, remember: false };
     }
 
-    const parsed = JSON.parse(stored) as { loggedIn?: boolean; doctorName?: string };
+    const parsed = JSON.parse(stored) as { loggedIn?: boolean; doctorName?: string; remember?: boolean };
 
     return {
-      loggedIn: Boolean(parsed.loggedIn),
+      // Only restore a logged-in state if the session was persisted with `remember: true`.
+      loggedIn: Boolean(parsed.loggedIn && parsed.remember),
       doctorName: parsed.doctorName?.trim() || AUTH_DOCTOR_NAME,
+      remember: Boolean(parsed.remember),
     };
   } catch {
-    return { loggedIn: false, doctorName: AUTH_DOCTOR_NAME };
+    return { loggedIn: false, doctorName: AUTH_DOCTOR_NAME, remember: false };
   }
 }
 
-function persistSession(loggedIn: boolean, doctorName: string) {
+function persistSession(loggedIn: boolean, doctorName: string, remember: boolean) {
   if (typeof window === 'undefined') {
     return;
   }
 
-  window.localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify({ loggedIn, doctorName }));
+  window.localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify({ loggedIn, doctorName, remember }));
 }
 
 function Dashboard({ doctorName, patient }: { doctorName: string; patient: PatientProfile | null }) {
@@ -172,15 +174,19 @@ export default function App() {
   const [patient, setPatient] = useState<PatientProfile | null>(null);
 
   useEffect(() => {
-    persistSession(session.loggedIn, session.doctorName);
+    persistSession(session.loggedIn, session.doctorName, Boolean(session.remember));
   }, [session]);
 
   if (page === 'login') {
     return (
       <LoginPage
-        onSignIn={(doctorName: string) => {
-          setSession({ loggedIn: true, doctorName });
+        onSignIn={(doctorName: string, remember?: boolean) => {
+          setSession({ loggedIn: true, doctorName, remember: Boolean(remember) });
           setPage('intro');
+        }}
+        onPass={() => {
+          setSession({ loggedIn: true, doctorName: AUTH_DOCTOR_NAME, remember: false });
+          setPage('dashboard');
         }}
       />
     );
