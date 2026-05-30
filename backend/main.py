@@ -21,23 +21,62 @@ logger = logging.getLogger("perio-voice-ai")
 load_dotenv(dotenv_path=Path(__file__).with_name(".env"))
 
 DEEPGRAM_API_KEY = os.getenv("DEEPGRAM_API_KEY", "").strip()
+
+
+def _build_tooth_number_terms() -> list[str]:
+    ones = [
+        "one",
+        "two",
+        "three",
+        "four",
+        "five",
+        "six",
+        "seven",
+        "eight",
+        "nine",
+    ]
+    teens = [
+        "ten",
+        "eleven",
+        "twelve",
+        "thirteen",
+        "fourteen",
+        "fifteen",
+        "sixteen",
+        "seventeen",
+        "eighteen",
+        "nineteen",
+    ]
+    terms = [*ones, *teens, "twenty", "thirty"]
+    terms.extend(f"twenty {ones_word}" for ones_word in ones)
+    terms.extend(["thirty one", "thirty two"])
+    return terms
+
+
 DEEPGRAM_KEYTERMS = [
+    "tooth",
+    "teeth",
+    "probing",
     "buccal",
     "lingual",
     "palatal",
     "mesial",
     "distal",
+    "bleeding",
+    "recession",
+    "implant",
+    "missing",
     "gingival",
     "periodontal",
     "pocket depth",
-    "bleeding",
-    "implant",
     "crown",
     "bridge",
     "canine",
     "incisor",
     "molar",
     "premolar",
+    *[f"tooth {term}" for term in _build_tooth_number_terms()],
+    *_build_tooth_number_terms(),
 ]
 
 app = FastAPI()

@@ -43,6 +43,9 @@ const HOMOPHONE_NORMALIZATIONS: Record<string, string> = {
   won: 'one',
   for: 'four',
   free: 'three',
+  toof: 'tooth',
+  teeth: 'tooth',
+  tooths: 'tooth',
 };
 
 function normalizeWord(word: string): string {
@@ -124,7 +127,9 @@ function parseDepthTriplet(tokens: string[]): number[] | undefined {
   return [values[0], values[1], values[2]];
 }
 
-function extractTooth(tokens: string[]): number | undefined {
+function extractTooth(tokens: string[], context?: TranscriptParseContext): number | undefined {
+  const expectedToothSelection = context?.mode !== 'probing' && context?.expectedInput !== 'depth-triplet';
+
   for (let index = 0; index < tokens.length; index += 1) {
     if (tokens[index] !== 'tooth') {
       continue;
@@ -137,6 +142,26 @@ function extractTooth(tokens: string[]): number | undefined {
     }
 
     return parsed.tooth;
+  }
+
+  if (!expectedToothSelection) {
+    return undefined;
+  }
+
+  if (tokens.length === 1) {
+    const parsed = parseToothNumberTokens(tokens);
+
+    if (parsed.tooth !== null && parsed.tooth >= 1 && parsed.tooth <= 32) {
+      return parsed.tooth;
+    }
+  }
+
+  if (tokens.length === 2 && tokens[0] === 'two') {
+    const parsed = parseToothNumberTokens(tokens.slice(1));
+
+    if (parsed.tooth !== null && parsed.tooth >= 1 && parsed.tooth <= 32) {
+      return parsed.tooth;
+    }
   }
 
   return undefined;
@@ -202,7 +227,7 @@ export function parseTranscriptToPayload(transcript: string, context?: Transcrip
   }
 
   const command = detectCommand(tokens);
-  const tooth = extractTooth(tokens);
+  const tooth = extractTooth(tokens, context);
   const surface = extractSurface(normalizedTranscript);
   const siteIndex = extractSiteIndex(normalizedTranscript);
   const depth = shouldParseDepthTriplet(context, tokens) ? parseDepthTriplet(tokens) : undefined;

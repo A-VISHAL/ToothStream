@@ -244,6 +244,8 @@ def parse_clinical_transcript(transcript: str, *, raw_transcript: str | None = N
         cursor_direction = 1
     elif command == "previous":
         cursor_direction = -1
+    elif missing:
+        cursor_direction = 1
     elif depth is not None:
         cursor_direction = 1
 
@@ -290,7 +292,7 @@ def parse_clinical_transcript(transcript: str, *, raw_transcript: str | None = N
     if cursor_direction is not None:
         payload["cursorDirection"] = cursor_direction
 
-    if depth is not None or command in {"skip", "resume", "next", "previous"}:
+    if depth is not None or command in {"skip", "resume", "next", "previous"} or missing:
         payload["advanceCursor"] = True
 
     if bleeding:

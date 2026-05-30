@@ -7,11 +7,13 @@ COMMON_WORD_REPLACEMENTS: dict[str, str] = {
     "for": "four",
     "free": "three",
     "tree": "three",
+    "toof": "tooth",
     "to": "two",
     "too": "two",
     "won": "one",
     "sex": "six",
     "ate": "eight",
+    "teeth": "tooth",
 }
 
 DENTAL_WORD_REPLACEMENTS: dict[str, str] = {
