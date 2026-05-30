@@ -452,6 +452,32 @@ function extractSiteIndex(transcript: string): number | undefined {
   return undefined;
 }
 
+function extractRecession(tokens: string[]): number | boolean | undefined {
+  for (let index = 0; index < tokens.length; index += 1) {
+    const token = tokens[index];
+
+    if (token !== 'recession' && token !== 'recessed') {
+      continue;
+    }
+
+    for (let searchIndex = index + 1; searchIndex < tokens.length; searchIndex += 1) {
+      const candidate = parseNumberToken(tokens[searchIndex] ?? '');
+
+      if (candidate !== null) {
+        return candidate;
+      }
+
+      if (tokens[searchIndex] === 'tooth' || tokens[searchIndex] === 'bleeding' || tokens[searchIndex] === 'implant' || tokens[searchIndex] === 'missing') {
+        break;
+      }
+    }
+
+    return true;
+  }
+
+  return undefined;
+}
+
 function detectCommand(tokens: string[]): PerioPayload['command'] | undefined {
   if (tokens.length !== 1) {
     return undefined;
@@ -459,7 +485,7 @@ function detectCommand(tokens: string[]): PerioPayload['command'] | undefined {
 
   const token = tokens[0];
 
-  if (token === 'bleeding' || token === 'missing' || token === 'implant' || token === 'undo' || token === 'next' || token === 'previous') {
+  if (token === 'bleeding' || token === 'missing' || token === 'implant' || token === 'undo' || token === 'next' || token === 'previous' || token === 'skip' || token === 'resume') {
     return token;
   }
 
@@ -503,10 +529,24 @@ export function parseTranscriptToPayload(transcript: string, context?: Transcrip
   const tooth = extractTooth(tokens, context);
   const surface = extractSurface(normalizedTranscript);
   const siteIndex = extractSiteIndex(normalizedTranscript);
+  const recession = extractRecession(tokens);
   const depth = explicitTooth ? undefined : protectedTriplet ?? (shouldParseDepthTriplet(context, tokens) ? parseDepthTriplet(tokens) : undefined);
   const bleeding = command === 'bleeding' || /\bbleed(?:ing)?\b/i.test(normalizedTranscript);
   const missing = command === 'missing' || /\bmissing\b/i.test(normalizedTranscript);
   const implant = command === 'implant' || /\bimplant\b/i.test(normalizedTranscript);
+  const explicitAdvance = command === 'next' || command === 'previous' || command === 'skip' || command === 'resume' || missing;
+  const toothCommitPending =
+    typeof tooth === 'number' ||
+    depth !== undefined ||
+    bleeding ||
+    missing ||
+    implant ||
+    surface !== undefined ||
+    siteIndex !== undefined;
+  const awaitingAdditionalFindings = toothCommitPending && !explicitAdvance;
+  const toothFinalized = explicitAdvance;
+  const autoAdvanceBlocked = toothCommitPending && !explicitAdvance;
+  const autoAdvanceAllowed = explicitAdvance;
   const routingDecision = protectedTriplet
     ? 'depth_triplet'
     : navigationIntent && typeof tooth === 'number'
@@ -522,6 +562,10 @@ export function parseTranscriptToPayload(transcript: string, context?: Transcrip
   console.info('[Perio Parser] triplet_match', Boolean(protectedTriplet));
   console.info('[Perio Parser] routing_decision', routingDecision);
   console.info('[Perio Parser] ACTION', tooth !== undefined ? `tooth=${tooth}` : depth ? `depth=${depth.join(',')}` : 'none');
+  console.info('[Perio Parser] AUTO_ADVANCE_BLOCKED', autoAdvanceBlocked);
+  console.info('[Perio Parser] WAITING_FOR_FINDINGS', awaitingAdditionalFindings);
+  console.info('[Perio Parser] TOOTH_FINALIZED', toothFinalized);
+  console.info('[Perio Parser] AUTO_ADVANCE_ALLOWED', autoAdvanceAllowed);
 
   if (
     command === undefined &&
@@ -545,7 +589,14 @@ export function parseTranscriptToPayload(transcript: string, context?: Transcrip
     bleeding,
     missing,
     implant,
+    recession,
     siteIndex,
+    advanceCursor: explicitAdvance,
+    toothCommitPending,
+    awaitingAdditionalFindings,
+    toothFinalized,
+    autoAdvanceBlocked,
+    autoAdvanceAllowed,
     transcript: cleaned,
     normalizedTranscript,
     timestamp: Date.now(),

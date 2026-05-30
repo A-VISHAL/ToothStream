@@ -157,6 +157,9 @@ function ingestPayload(
   fallbackSiteIndex: number | null,
   updateActiveRef: (tooth: number | null, surface: ToothSurface | null, siteIndex: number | null) => void,
   updateParserContext: (mode: ParserMode, expectation: ParserExpectation) => void,
+  toothCommitPendingRef: React.MutableRefObject<boolean>,
+  awaitingAdditionalFindingsRef: React.MutableRefObject<boolean>,
+  logToothWorkflow: (event: 'AUTO_ADVANCE_BLOCKED' | 'WAITING_FOR_FINDINGS' | 'TOOTH_FINALIZED' | 'AUTO_ADVANCE_ALLOWED', detail: string) => void,
   historyStackRef: React.MutableRefObject<ChartSnapshot[]>,
   flashFeedback: (feedback: CommandFeedback) => void,
   playSound: (kind: ClinicalSoundType, trigger?: ClinicalSoundTrigger) => void,
@@ -196,6 +199,7 @@ function ingestPayload(
     hydrated.bleeding === true ||
     hydrated.missing === true ||
     hydrated.implant === true ||
+    hydrated.recession !== undefined ||
     typeof hydrated.surface === 'string' ||
     typeof hydrated.siteIndex === 'number';
 
@@ -203,9 +207,19 @@ function ingestPayload(
   const toothWasImplant = toothNumber !== null ? currentTeeth[toothNumber]?.implant === true : false;
   const surface = normalizeSurface(hydrated.surface) ?? fallbackSurface ?? 'buccal';
   const siteIndex = clampSiteIndex(hydrated.siteIndex ?? fallbackSiteIndex ?? undefined);
+  const explicitAdvance = hydrated.autoAdvanceAllowed === true || hydrated.missing === true || hydrated.command === 'next' || hydrated.command === 'previous';
+  const workflowSignaled =
+    hydrated.toothCommitPending === true ||
+    hasChartSignal ||
+    hasTriplet ||
+    hydrated.bleeding === true ||
+    hydrated.recession !== undefined ||
+    hydrated.implant === true ||
+    typeof hydrated.surface === 'string' ||
+    typeof hydrated.siteIndex === 'number';
   const commandLabel =
     hydrated.command ?? (hydrated.missing ? 'missing' : hydrated.implant ? 'implant' : hydrated.bleeding ? 'bleeding' : 'depth-triplet');
-  const cursorAction = hydrated.missing ? 'advance' : 'stay';
+  const cursorAction = explicitAdvance ? 'advance' : 'stay';
   const resolvedCursorTooth =
     toothNumber === null
       ? null
@@ -258,6 +272,23 @@ function ingestPayload(
 
   if (shouldSnapshot) {
     snapshotChartState(historyStackRef, currentTeeth, fallbackTooth, fallbackSurface, fallbackSiteIndex, previousPayload, parserMode, expectedInput);
+  }
+
+  if (workflowSignaled && !explicitAdvance) {
+    toothCommitPendingRef.current = true;
+    awaitingAdditionalFindingsRef.current = true;
+    logToothWorkflow('AUTO_ADVANCE_BLOCKED', `tooth=${toothNumber ?? 'null'} command=${commandLabel}`);
+    logToothWorkflow('WAITING_FOR_FINDINGS', `tooth=${toothNumber ?? 'null'} surface=${surface} siteIndex=${resolvedCursorSiteIndex}`);
+  }
+
+  if (explicitAdvance) {
+    if (awaitingAdditionalFindingsRef.current) {
+      logToothWorkflow('TOOTH_FINALIZED', `tooth=${fallbackTooth ?? toothNumber ?? 'null'} command=${commandLabel}`);
+    }
+
+    logToothWorkflow('AUTO_ADVANCE_ALLOWED', `tooth=${toothNumber ?? 'null'} command=${commandLabel}`);
+    toothCommitPendingRef.current = false;
+    awaitingAdditionalFindingsRef.current = false;
   }
 
   console.info('[Perio UI] parser transition', {
@@ -456,22 +487,6 @@ function ingestPayload(
     return nextTeeth;
   });
 
-  if (hasTriplet) {
-    const nextTooth = getNextToothInChartOrder(toothNumber) ?? toothNumber;
-
-    setCurrentTooth(nextTooth);
-    setCurrentSurface(surface);
-    setActiveSiteIndex(0);
-    updateActiveRef(nextTooth, surface, 0);
-    console.info('[Perio UI] cursor advanced after triplet', {
-      fromTooth: toothNumber,
-      toTooth: nextTooth,
-      surface,
-      implant: nextTooth === toothNumber ? nextTooth === toothNumber : false,
-    });
-    pushDebugTimeline('state', 'cursor advanced', `from=${toothNumber} to=${nextTooth} surface=${surface}`);
-  }
-
   updateParserContext('probing', 'depth-triplet');
 
   if (hydrated.bleeding) {
@@ -534,6 +549,8 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
   const lastActiveToothRef = useRef<number | null>(1);
   const lastActiveSurfaceRef = useRef<ToothSurface | null>('buccal');
   const lastActiveSiteIndexRef = useRef<number | null>(0);
+  const toothCommitPendingRef = useRef(false);
+  const awaitingAdditionalFindingsRef = useRef(false);
   const historyStackRef = useRef<ChartSnapshot[]>([]);
   const feedbackTimerRef = useRef<number | null>(null);
   const { playSound, unlockAudio } = useClinicalSoundManager(soundEnabled);
@@ -575,18 +592,37 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
     setExpectedInput(expectation);
   }, []);
 
+  const logToothWorkflow = useCallback(
+    (event: 'AUTO_ADVANCE_BLOCKED' | 'WAITING_FOR_FINDINGS' | 'TOOTH_FINALIZED' | 'AUTO_ADVANCE_ALLOWED', detail: string) => {
+      console.info(`[Perio UI] ${event}`, detail);
+      pushDebugTimeline('parser', event, detail);
+    },
+    [pushDebugTimeline]
+  );
+
   const selectTooth = useCallback(
     (tooth: number, surface?: ToothSurface | null) => {
+      const toothChanged = currentTooth !== null && currentTooth !== tooth;
+
+      if (toothChanged && awaitingAdditionalFindingsRef.current) {
+        logToothWorkflow('TOOTH_FINALIZED', `tooth=${currentTooth} -> tooth=${tooth}`);
+      }
+
       snapshotChartState(historyStackRef, teeth, currentTooth, currentSurface, activeSiteIndex, lastPayload, parserMode, expectedInput);
       setCurrentTooth(tooth);
       setCurrentSurface(surface ?? null);
       setActiveSiteIndex(surface ? 0 : null);
       updateActiveRef(tooth, surface ?? null, surface ? 0 : null);
       updateParserContext('navigation', surface ? 'depth-triplet' : 'surface');
+      toothCommitPendingRef.current = true;
+      awaitingAdditionalFindingsRef.current = true;
+      if (toothChanged) {
+        logToothWorkflow('WAITING_FOR_FINDINGS', `tooth=${tooth} surface=${surface ?? 'null'}`);
+      }
       pushDebugTimeline('state', 'tooth selected', `tooth=${tooth} surface=${surface ?? 'null'}`);
       playSound('navigation', 'select_tooth');
     },
-    [activeSiteIndex, currentSurface, currentTooth, expectedInput, historyStackRef, lastPayload, parserMode, playSound, teeth, updateActiveRef, updateParserContext, pushDebugTimeline]
+    [activeSiteIndex, currentSurface, currentTooth, expectedInput, historyStackRef, lastPayload, logToothWorkflow, parserMode, playSound, teeth, updateActiveRef, updateParserContext, pushDebugTimeline]
   );
 
   const selectSurface = useCallback(
@@ -600,10 +636,13 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
       setActiveSiteIndex(0);
       updateActiveRef(currentTooth, surface, 0);
       updateParserContext('probing', 'depth-triplet');
+      toothCommitPendingRef.current = true;
+      awaitingAdditionalFindingsRef.current = true;
+      logToothWorkflow('WAITING_FOR_FINDINGS', `tooth=${currentTooth} surface=${surface}`);
       pushDebugTimeline('state', 'surface selected', `tooth=${currentTooth} surface=${surface}`);
       playSound('navigation', 'select_surface');
     },
-    [activeSiteIndex, currentSurface, currentTooth, expectedInput, historyStackRef, lastPayload, parserMode, playSound, teeth, updateActiveRef, updateParserContext, pushDebugTimeline]
+    [activeSiteIndex, currentSurface, currentTooth, expectedInput, historyStackRef, lastPayload, logToothWorkflow, parserMode, playSound, teeth, updateActiveRef, updateParserContext, pushDebugTimeline]
   );
 
   const navigateTooth = useCallback(
@@ -619,16 +658,24 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
         return;
       }
 
+      if (awaitingAdditionalFindingsRef.current) {
+        logToothWorkflow('TOOTH_FINALIZED', `tooth=${currentTooth} direction=${direction}`);
+      }
+
+      logToothWorkflow('AUTO_ADVANCE_ALLOWED', `direction=${direction} from=${currentTooth} to=${nextTooth}`);
+
       snapshotChartState(historyStackRef, teeth, currentTooth, currentSurface, activeSiteIndex, lastPayload, parserMode, expectedInput);
       setCurrentTooth(nextTooth);
       setActiveSiteIndex(currentSurface ? 0 : null);
       updateActiveRef(nextTooth, currentSurface, currentSurface ? 0 : null);
       updateParserContext('navigation', currentSurface ? 'depth-triplet' : 'surface');
+      toothCommitPendingRef.current = true;
+      awaitingAdditionalFindingsRef.current = true;
       pushDebugTimeline('command', direction, `tooth=${nextTooth} surface=${currentSurface ?? 'null'}`);
       flashFeedback({ kind: 'jump', message: `${direction.toUpperCase()} TO TOOTH ${nextTooth}` });
       playSound('navigation', direction === 'next' ? 'cursor_jump' : 'go_to');
     },
-    [activeSiteIndex, currentSurface, currentTooth, expectedInput, flashFeedback, historyStackRef, lastPayload, parserMode, playSound, pushDebugTimeline, teeth, updateActiveRef, updateParserContext]
+    [activeSiteIndex, currentSurface, currentTooth, expectedInput, flashFeedback, historyStackRef, lastPayload, logToothWorkflow, parserMode, playSound, pushDebugTimeline, teeth, updateActiveRef, updateParserContext]
   );
 
   const applyUndo = useCallback(() => {
@@ -909,6 +956,9 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
       resolvedActiveSiteIndex,
       updateActiveRef,
       updateParserContext,
+      toothCommitPendingRef,
+      awaitingAdditionalFindingsRef,
+      logToothWorkflow,
       historyStackRef,
       flashFeedback,
       playSound,
@@ -932,6 +982,7 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
     navigateTooth,
     selectTooth,
     selectSurface,
+    logToothWorkflow,
     updateActiveRef,
     updateParserContext,
   ]);

@@ -18,13 +18,21 @@ export type ConnectionState = 'connecting' | 'connected' | 'listening' | 'reconn
 export interface PerioPayload {
   tooth?: number;
   explicitTooth?: boolean;
-  command?: 'bleeding' | 'missing' | 'implant' | 'undo' | 'next' | 'previous';
+  command?: 'bleeding' | 'missing' | 'implant' | 'undo' | 'next' | 'previous' | 'skip' | 'resume';
   surface?: string;
   depth?: number[];
   bleeding?: boolean;
   missing?: boolean;
   implant?: boolean;
+  recession?: number | boolean;
   siteIndex?: number;
+  advanceCursor?: boolean;
+  toothCommitPending?: boolean;
+  awaitingAdditionalFindings?: boolean;
+  toothFinalized?: boolean;
+  autoAdvanceBlocked?: boolean;
+  autoAdvanceAllowed?: boolean;
+  cursorDirection?: number;
   transcript?: string;
   normalizedTranscript?: string;
   timestamp?: number;

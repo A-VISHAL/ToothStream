@@ -1287,5 +1287,388 @@ body {
   }
 }
 
+.hospital-auth-shell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: linear-gradient(180deg, #ffffff 0%, #f6fbff 100%) !important;
+}
+
+.hospital-auth-shell::before {
+  opacity: 0.08;
+}
+
+.hospital-auth-backdrop {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.hospital-auth-glow {
+  position: absolute;
+  border-radius: 999px;
+  filter: blur(72px);
+  opacity: 0.14;
+}
+
+.hospital-auth-glow-left {
+  top: -120px;
+  left: -120px;
+  width: 300px;
+  height: 300px;
+  background: rgba(14, 165, 233, 0.12);
+}
+
+.hospital-auth-glow-right {
+  top: -120px;
+  right: -120px;
+  width: 280px;
+  height: 280px;
+  background: rgba(14, 165, 233, 0.06);
+}
+
+.hospital-auth-page {
+  position: relative;
+  z-index: 1;
+  width: min(100%, 1060px);
+  margin: 0 auto;
+  padding: 6px;
+}
+
+.hospital-auth-card {
+  width: 100%;
+  justify-content: center;
+  border-radius: 24px;
+  padding: 28px 28px 24px;
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.05);
+  backdrop-filter: blur(10px);
+}
+
+.hospital-auth-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(340px, 0.9fr);
+  gap: 36px;
+  align-items: start;
+}
+
+.hospital-auth-card {
+  max-width: 520px;
+  justify-self: end;
+}
+
+.hospital-auth-visual {
+  border: 0;
+  box-shadow: none;
+}
+
+.hospital-auth-brand-panel {
+  position: relative;
+  justify-self: start;
+  max-width: 500px;
+  padding: 18px 0 18px 20px;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  backdrop-filter: none;
+  overflow: hidden;
+}
+
+.hospital-auth-brand-panel::before {
+  content: '';
+  position: absolute;
+  inset: 8px auto 8px 0;
+  width: 2px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgba(14, 165, 233, 0.32), rgba(20, 184, 166, 0.04));
+  box-shadow: 0 0 0 8px rgba(125, 211, 252, 0.04);
+  pointer-events: none;
+}
+
+.hospital-auth-brand-panel::after {
+  content: '';
+  position: absolute;
+  inset: -72px auto auto -84px;
+  width: 200px;
+  height: 200px;
+  border-radius: 999px;
+  background: radial-gradient(circle, rgba(125, 211, 252, 0.12), transparent 68%);
+  pointer-events: none;
+}
+
+.hospital-auth-brand-panel > * {
+  position: relative;
+  z-index: 1;
+}
+
+.hospital-auth-brand-kicker {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  margin-bottom: 14px;
+  padding: 7px 11px;
+  border-radius: 999px;
+  background: rgba(236, 253, 245, 0.82);
+  border: 1px solid rgba(20, 184, 166, 0.1);
+  color: #0e7490;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.hospital-auth-brand-title {
+  position: relative;
+  margin: 2px 0 0;
+  color: #0f172a;
+  font-family: "Plus Jakarta Sans", "Aptos", "Segoe UI Variable", sans-serif;
+  font-size: clamp(1.45rem, 2.2vw, 2.15rem);
+  line-height: 1.08;
+  letter-spacing: -0.05em;
+  max-width: 13ch;
+}
+
+.hospital-auth-brand-line {
+  position: relative;
+  margin: 12px 0 0;
+  color: #64748b;
+  font-size: 14px;
+  line-height: 1.55;
+  max-width: 28ch;
+}
+
+.hospital-auth-chip-row {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 22px;
+}
+
+.hospital-auth-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(125, 211, 252, 0.16);
+  background: rgba(255, 255, 255, 0.9);
+  color: #0e7490;
+  font-size: 11px;
+  font-weight: 700;
+  box-shadow: 0 6px 14px rgba(15, 23, 42, 0.03);
+}
+
+.hospital-auth-card,
+.hospital-auth-visual {
+  align-self: stretch;
+}
+
+.hospital-auth-header {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.hospital-auth-badge {
+  width: fit-content;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 11px;
+  border-radius: 999px;
+  background: rgba(236, 253, 245, 0.86);
+  border: 1px solid rgba(20, 184, 166, 0.1);
+  color: #0f766e;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.hospital-auth-eyebrow {
+  margin: 0;
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+}
+
+.hospital-auth-title {
+  margin: 0;
+  color: #0f172a;
+  font-family: "Plus Jakarta Sans", "Aptos", "Segoe UI Variable", sans-serif;
+  font-size: clamp(1.3rem, 2vw, 1.75rem);
+  line-height: 1.12;
+  letter-spacing: -0.04em;
+}
+
+.hospital-auth-subtitle {
+  margin: 0;
+  max-width: 18rem;
+  color: #475569;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.hospital-auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 0;
+}
+
+.hospital-auth-label {
+  display: block;
+  margin-bottom: 5px;
+  color: #475569;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.hospital-auth-input-shell {
+  position: relative;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  box-shadow: 0 3px 8px rgba(15, 23, 42, 0.025);
+}
+
+.hospital-auth-input-icon {
+  position: absolute;
+  left: 16px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 18px;
+  height: 18px;
+  color: #7dd3fc;
+  pointer-events: none;
+}
+
+.hospital-auth-input {
+  width: 100%;
+  height: 46px;
+  border-radius: 14px;
+  border: 0;
+  background: transparent;
+  color: #0f172a;
+  padding: 0 16px 0 44px;
+  font-size: 14px;
+  font-weight: 500;
+  outline: none;
+  transition: border-color 160ms ease, box-shadow 160ms ease, background-color 160ms ease;
+}
+
+.hospital-auth-input::placeholder {
+  color: #94a3b8;
+}
+
+.hospital-auth-input:focus {
+  border-color: #7dd3fc;
+  box-shadow: 0 0 0 4px rgba(125, 211, 252, 0.18);
+  background: #ffffff;
+}
+
+.hospital-auth-error {
+  margin: 0;
+  border-radius: 12px;
+  border: 1px solid rgba(248, 113, 113, 0.24);
+  background: #fff1f2;
+  color: #be123c;
+  padding: 10px 12px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.hospital-auth-submit-btn {
+  width: 100%;
+  height: 46px;
+  margin-top: 4px;
+  border: none;
+  border-radius: 14px;
+  background: #102038;
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  box-shadow: 0 8px 14px rgba(15, 23, 42, 0.07);
+  transition: transform 140ms ease, box-shadow 140ms ease, background-color 140ms ease;
+}
+
+.hospital-auth-submit-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 18px rgba(15, 23, 42, 0.09);
+  background: #0c1a2f;
+}
+
+.hospital-auth-submit-btn:active {
+  transform: translateY(1px);
+}
+
+.hospital-auth-submit-btn:disabled {
+  opacity: 0.7;
+  cursor: progress;
+}
+
+.hospital-auth-footer {
+  margin-top: 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+@media (max-width: 640px) {
+  .hospital-auth-shell {
+    padding: 16px;
+  }
+
+  .hospital-auth-card {
+    max-width: none;
+    justify-self: stretch;
+    padding: 22px 16px 18px;
+    border-radius: 20px;
+  }
+
+  .hospital-auth-title {
+    font-size: 1.45rem;
+  }
+
+  .hospital-auth-input {
+    height: 44px;
+    border-radius: 12px;
+  }
+
+  .hospital-auth-submit-btn {
+    height: 44px;
+    border-radius: 12px;
+  }
+
+  .hospital-auth-layout {
+    grid-template-columns: 1fr;
+    gap: 18px;
+  }
+
+  .hospital-auth-brand-panel {
+    max-width: none;
+    padding: 0 0 0 16px;
+  }
+
+  .hospital-auth-brand-title {
+    max-width: none;
+    font-size: 1.35rem;
+  }
+}
+
 
 

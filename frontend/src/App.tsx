@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import './App.css';
 import { LoginPage } from './components/LoginPage';
+import { ClinicalOverviewPage } from './components/ClinicalOverviewPage';
+import { PatientEntryPage, type PatientProfile } from './components/PatientEntryPage';
 import { PerioChart } from './components/PerioChart';
 import { DebugPanel } from './components/DebugPanel';
 import { StatusBar } from './components/StatusBar';
@@ -25,7 +27,7 @@ function getStoredSession(): { loggedIn: boolean; doctorName: string } {
     const parsed = JSON.parse(stored) as { loggedIn?: boolean; doctorName?: string };
 
     return {
-      loggedIn: false,
+      loggedIn: Boolean(parsed.loggedIn),
       doctorName: parsed.doctorName?.trim() || AUTH_DOCTOR_NAME,
     };
   } catch {
@@ -41,7 +43,7 @@ function persistSession(loggedIn: boolean, doctorName: string) {
   window.localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify({ loggedIn, doctorName }));
 }
 
-function Dashboard({ doctorName }: { doctorName: string }) {
+function Dashboard({ doctorName, patient }: { doctorName: string; patient: PatientProfile | null }) {
   const {
     connectionState,
     latencyMs,
@@ -95,6 +97,11 @@ function Dashboard({ doctorName }: { doctorName: string }) {
               <span className="rounded-full border border-cyan-200 bg-cyan-50 px-4 py-2 text-xs font-semibold uppercase tracking-[0.24em] text-cyan-800">
                 {doctorName}
               </span>
+              {patient ? (
+                <span className="rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-semibold uppercase tracking-[0.24em] text-slate-700 shadow-sm">
+                  {patient.name}
+                </span>
+              ) : null}
 
             <div className="flex flex-wrap items-center gap-3 text-sm">
               <span
@@ -160,16 +167,43 @@ function Dashboard({ doctorName }: { doctorName: string }) {
 
 export default function App() {
   const [session, setSession] = useState(() => getStoredSession());
+  const [page, setPage] = useState<'login' | 'intro' | 'patient-entry' | 'dashboard'>(session.loggedIn ? 'intro' : 'login');
+  const [patient, setPatient] = useState<PatientProfile | null>(null);
 
   useEffect(() => {
     persistSession(session.loggedIn, session.doctorName);
   }, [session]);
 
-  if (!session.loggedIn) {
+  if (page === 'login') {
     return (
       <LoginPage
-        onSignIn={(doctorName) => {
+        onSignIn={(doctorName: string) => {
           setSession({ loggedIn: true, doctorName });
+          setPage('intro');
+        }}
+      />
+    );
+  }
+
+  if (page === 'intro') {
+    return (
+      <ClinicalOverviewPage
+        doctorName={session.doctorName}
+        onGetStarted={() => {
+          setPage('patient-entry');
+        }}
+      />
+    );
+  }
+
+  if (page === 'patient-entry') {
+    return (
+      <PatientEntryPage
+        doctorName={session.doctorName}
+        onBack={() => setPage('intro')}
+        onContinue={(nextPatient) => {
+          setPatient(nextPatient);
+          setPage('dashboard');
         }}
       />
     );
@@ -177,7 +211,7 @@ export default function App() {
 
   return (
     <WebSocketProvider>
-      <Dashboard doctorName={session.doctorName} />
+      <Dashboard doctorName={session.doctorName} patient={patient} />
     </WebSocketProvider>
   );
 }

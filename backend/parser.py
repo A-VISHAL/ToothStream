@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import logging
 from typing import Any
 
 ONES: dict[str, int] = {
@@ -62,6 +63,7 @@ SITE_INDEX_WORDS: dict[str, int] = {
 
 COMMAND_WORDS = {"undo", "repeat", "correct", "skip", "resume", "next", "previous"}
 TOKEN_PATTERN = re.compile(r"\d+|[a-z]+")
+logger = logging.getLogger("perio-parser")
 
 
 def tokenize(transcript: str) -> list[str]:
@@ -235,6 +237,22 @@ def parse_clinical_transcript(transcript: str, *, raw_transcript: str | None = N
     bleeding = any(token in {"bleeding", "bleed"} for token in tokens)
     missing = "missing" in tokens
     implant = "implant" in tokens
+    tooth_commit_pending = any(
+        (
+            tooth is not None,
+            depth is not None,
+            bleeding,
+            recession is not None,
+            implant,
+            surface is not None,
+            site_index is not None,
+        )
+    )
+    explicit_advance = command in {"next", "skip", "resume", "previous"} or missing
+    awaiting_additional_findings = tooth_commit_pending and not explicit_advance
+    tooth_finalized = explicit_advance
+    auto_advance_blocked = tooth_commit_pending and not explicit_advance
+    auto_advance_allowed = explicit_advance
 
     if implant:
         missing = False
@@ -245,8 +263,6 @@ def parse_clinical_transcript(transcript: str, *, raw_transcript: str | None = N
     elif command == "previous":
         cursor_direction = -1
     elif missing:
-        cursor_direction = 1
-    elif depth is not None:
         cursor_direction = 1
 
     has_chart_signal = any(
@@ -294,6 +310,14 @@ def parse_clinical_transcript(transcript: str, *, raw_transcript: str | None = N
 
     if depth is not None or command in {"skip", "resume", "next", "previous"} or missing:
         payload["advanceCursor"] = True
+
+    payload["toothCommitPending"] = tooth_commit_pending
+    payload["awaitingAdditionalFindings"] = awaiting_additional_findings
+    payload["toothFinalized"] = tooth_finalized
+    payload["autoAdvanceBlocked"] = auto_advance_blocked
+    payload["autoAdvanceAllowed"] = auto_advance_allowed
+
+    logger.info("AUTO_ADVANCE_BLOCKED=%s WAITING_FOR_FINDINGS=%s TOOTH_FINALIZED=%s AUTO_ADVANCE_ALLOWED=%s", auto_advance_blocked, awaiting_additional_findings, tooth_finalized, auto_advance_allowed)
 
     if bleeding:
         payload["bleeding"] = True
