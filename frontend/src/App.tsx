@@ -25,7 +25,7 @@ function getStoredSession(): { loggedIn: boolean; doctorName: string } {
     const parsed = JSON.parse(stored) as { loggedIn?: boolean; doctorName?: string };
 
     return {
-      loggedIn: parsed.loggedIn === true,
+      loggedIn: false,
       doctorName: parsed.doctorName?.trim() || AUTH_DOCTOR_NAME,
     };
   } catch {

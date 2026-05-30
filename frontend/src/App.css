@@ -187,22 +187,12 @@ body {
 
 .auth-shell {
   background:
-    radial-gradient(circle at top left, rgba(14, 165, 233, 0.18), transparent 36%),
-    radial-gradient(circle at bottom right, rgba(56, 189, 248, 0.1), transparent 30%),
-    linear-gradient(180deg, var(--perio-bg-start), var(--perio-bg-end));
+    radial-gradient(circle at top left, rgba(186, 230, 253, 0.38), transparent 28%),
+    linear-gradient(180deg, #ffffff 0%, #f8fafc 58%, #eef3f7 100%);
 }
 
-.auth-panel {
+.auth-grid {
   position: relative;
-}
-
-.auth-panel::before {
-  content: "";
-  position: absolute;
-  inset: 1px;
-  border-radius: inherit;
-  pointer-events: none;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.3), transparent 28%);
 }
 
 .auth-fade-in {
