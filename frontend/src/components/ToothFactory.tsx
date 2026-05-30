@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { RealCanineSVG } from './RealCanineSVG';
-import { RealIncisorSVG, type ToothAnatomyProps } from './RealIncisorSVG';
+import { RealIncisorSVG, type ToothAnatomyProps, type ToothMorphologyVariant } from './RealIncisorSVG';
 import { RealMolarSVG } from './RealMolarSVG';
 import { RealPremolarSVG } from './RealPremolarSVG';
 import type { ToothState, ToothSurface } from '../types';
@@ -40,6 +40,31 @@ function classifyTooth(toothNumber: number): ToothFamily {
   }
 
   return 'molar';
+}
+
+function getMorphologyVariant(family: ToothFamily, toothNumber: number): ToothMorphologyVariant {
+  switch (family) {
+    case 'incisor':
+      return [7, 10, 23, 26].includes(toothNumber) ? 'incisor-lateral' : 'incisor-central';
+    case 'canine':
+      return [22, 23, 24, 25, 26, 27].includes(toothNumber) ? 'canine-mandibular' : 'canine-maxillary';
+    case 'premolar':
+      return [4, 5, 12, 13, 20, 21, 28, 29].includes(toothNumber) ? 'premolar-first' : 'premolar-second';
+    default:
+      if ([1, 16, 17, 32].includes(toothNumber)) {
+        return 'molar-third';
+      }
+
+      if ([2, 15, 18, 31].includes(toothNumber)) {
+        return 'molar-second';
+      }
+
+      return 'molar-first';
+  }
+}
+
+function shouldMirrorTooth(toothNumber: number, arch: ArchSide): boolean {
+  return arch === 'maxillary' ? toothNumber > 8 : toothNumber < 25;
 }
 
 function depthToLength(depth: number): number {
@@ -227,6 +252,8 @@ function BackgroundGuides({ arch }: { arch: ArchSide }) {
 
 export function ToothFactory({ tooth, toothNumber, arch, positionIndex, activeTooth, activeSurface, activeSiteIndex }: ToothFactoryProps) {
   const family = classifyTooth(toothNumber);
+  const variant = getMorphologyVariant(family, toothNumber);
+  const mirror = shouldMirrorTooth(toothNumber, arch);
   const isActive = toothNumber === activeTooth;
   const updatedRecently = tooth.updatedAt > 0 && Date.now() - tooth.updatedAt < 2200;
   const shadowId = useMemo(() => `tooth-shadow-${arch}-${toothNumber}-${positionIndex}`, [arch, toothNumber, positionIndex]);
@@ -276,6 +303,8 @@ export function ToothFactory({ tooth, toothNumber, arch, positionIndex, activeTo
           missing: tooth.missing,
           implant: tooth.implant,
           isActive,
+          variant,
+          mirror,
         })}
       </g>
 

@@ -1,5 +1,15 @@
 import React from 'react';
-import type { ToothMorphologyVariant } from './ToothFactory';
+
+export type ToothMorphologyVariant =
+  | 'incisor-central'
+  | 'incisor-lateral'
+  | 'canine-maxillary'
+  | 'canine-mandibular'
+  | 'premolar-first'
+  | 'premolar-second'
+  | 'molar-first'
+  | 'molar-second'
+  | 'molar-third';
 
 export interface ToothAnatomyProps {
   fill: string;

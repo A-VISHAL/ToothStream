@@ -3,6 +3,9 @@ import { parseTranscriptToPayload } from './transcriptParser';
 import { useDeepgramTranscription } from './useDeepgramTranscription';
 import type {
   CommandFeedback,
+  PerioDebugState,
+  PerioDebugStreamEntry,
+  PerioDebugTimelineEvent,
   PerioChartContextValue,
   PerioPayload,
   ToothState,
@@ -56,6 +59,8 @@ function cloneTeethState(source: Record<number, ToothState>): Record<number, Too
 }
 
 type SoundTone = 'chart' | 'bleeding' | 'undo' | 'jump';
+type ParserMode = 'idle' | 'navigation' | 'probing';
+type ParserExpectation = 'tooth' | 'surface' | 'depth-triplet';
 
 function createTonePlan(kind: SoundTone): Array<{ frequency: number; duration: number; delay: number }> {
   switch (kind) {
@@ -77,7 +82,17 @@ function createTonePlan(kind: SoundTone): Array<{ frequency: number; duration: n
 }
 
 function isUserAudioAllowed(): boolean {
-  return typeof window !== 'undefined' && window.navigator.userActivation?.hasBeenActive === true;
+  if (typeof window === 'undefined') {
+    return false;
+  }
+
+  const navigatorWithActivation = window.navigator as Navigator & {
+    userActivation?: {
+      hasBeenActive?: boolean;
+    };
+  };
+
+  return navigatorWithActivation.userActivation?.hasBeenActive === true;
 }
 
 async function playTone(kind: SoundTone, enabled: boolean, audioContextRef: React.MutableRefObject<AudioContext | null>) {
@@ -176,12 +191,24 @@ function getNextToothInChartOrder(tooth: number): number | null {
   return null;
 }
 
-function getNextCursorAfterCommit(tooth: number): { tooth: number | null; surface: ToothSurface; siteIndex: number } {
-  return {
-    tooth: getNextToothInChartOrder(tooth),
-    surface: 'buccal',
-    siteIndex: 0,
-  };
+function getPreviousToothInChartOrder(tooth: number): number | null {
+  if (tooth > 1 && tooth <= 16) {
+    return tooth - 1;
+  }
+
+  if (tooth === 1) {
+    return 17;
+  }
+
+  if (tooth >= 17 && tooth < 32) {
+    return tooth + 1;
+  }
+
+  if (tooth === 32) {
+    return 16;
+  }
+
+  return null;
 }
 
 function hydratePayload(payload: PerioPayload): PerioPayload {
@@ -209,13 +236,15 @@ function ingestPayload(
   updateActiveRef: (tooth: number | null, surface: ToothSurface | null, siteIndex: number | null) => void,
   historyStackRef: React.MutableRefObject<ChartSnapshot[]>,
   flashFeedback: (feedback: CommandFeedback) => void,
-  playCommandSound: (kind: SoundTone) => void
+  playCommandSound: (kind: SoundTone) => void,
+  pushDebugTimeline: (category: string, message: string, detail?: string) => void
 ) {
   const hydrated = hydratePayload(payload);
   const receivedAt = Date.now();
   const payloadTimestamp = hydrated.timestamp ?? receivedAt;
 
   console.info('[Perio UI] payload received', hydrated);
+  pushDebugTimeline('parser', 'payload received', JSON.stringify(hydrated));
 
   setLatencyMs(Math.max(0, receivedAt - payloadTimestamp));
   setLastPayload(hydrated);
@@ -239,6 +268,7 @@ function ingestPayload(
       toothNumber,
       hydrated,
     });
+    pushDebugTimeline('parser', 'payload dropped', `tooth=${toothNumber ?? 'null'}`);
 
     // Still record the raw transcript for visibility if present
     if (typeof hydrated.transcript === 'string' && hydrated.transcript.trim()) {
@@ -258,7 +288,9 @@ function ingestPayload(
     return;
   }
 
-  console.info('[Perio UI] cursor before triplet', {
+  const shouldCommitDepths = Array.isArray(hydrated.depth) && hydrated.depth.length === SITE_COUNT;
+
+  console.info('[Perio UI] cursor resolved', {
     currentTooth: fallbackTooth,
     currentSurface: fallbackSurface,
     currentSiteIndex: fallbackSiteIndex,
@@ -266,23 +298,20 @@ function ingestPayload(
     resolvedSurface: surface,
     resolvedSiteIndex: siteIndex,
   });
+  pushDebugTimeline('state', 'cursor resolved', `tooth=${toothNumber} surface=${surface} site=${siteIndex}`);
 
-  const shouldCommitDepths = Array.isArray(hydrated.depth) && hydrated.depth.length === SITE_COUNT;
-
-  const nextCursor = getNextCursorAfterCommit(toothNumber);
-
-  setCurrentTooth(nextCursor.tooth);
-  setCurrentSurface(nextCursor.surface);
-  setActiveSiteIndex(nextCursor.siteIndex);
-  updateActiveRef(nextCursor.tooth, nextCursor.surface, nextCursor.siteIndex);
+  setCurrentTooth(toothNumber);
+  setCurrentSurface(surface);
+  setActiveSiteIndex(siteIndex);
+  updateActiveRef(toothNumber, surface, siteIndex);
 
   console.info('[Perio UI] state update queued', {
     toothNumber,
     surface,
     siteIndex,
     reusedFallback: typeof hydrated.tooth !== 'number',
-    nextCursor,
   });
+  pushDebugTimeline('state', 'state update queued', `tooth=${toothNumber} surface=${surface}`);
 
   // Also push a debug transcript entry with the JSON payload for end-to-end visibility
   setTranscriptEntries((previous) => {
@@ -357,6 +386,7 @@ function ingestPayload(
       depth: nextTooth[surface].depth,
       bleeding: nextTooth[surface].bleeding,
     });
+    pushDebugTimeline('action', 'tooth state updated', `tooth=${toothNumber} surface=${surface}`);
 
     if (Array.isArray(hydrated.depth) && hydrated.depth.length === SITE_COUNT) {
       console.info('[Perio UI] triplet committed', {
@@ -367,13 +397,6 @@ function ingestPayload(
     }
 
     return nextTeeth;
-  });
-
-  console.info('[Perio UI] advance cursor', {
-    fromTooth: toothNumber,
-    toTooth: nextCursor.tooth,
-    toSurface: nextCursor.surface,
-    toSiteIndex: nextCursor.siteIndex,
   });
 
   if (hydrated.bleeding) {
@@ -394,6 +417,23 @@ function ingestPayload(
   });
 }
 
+function snapshotChartState(
+  historyStackRef: React.MutableRefObject<ChartSnapshot[]>,
+  teeth: Record<number, ToothState>,
+  currentTooth: number | null,
+  currentSurface: ToothSurface | null,
+  activeSiteIndex: number | null,
+  lastPayload: PerioPayload | null
+) {
+  historyStackRef.current.push({
+    teeth: cloneTeethState(teeth),
+    currentTooth,
+    currentSurface,
+    activeSiteIndex,
+    lastPayload,
+  });
+}
+
 export function WebSocketProvider({ children }: { children: React.ReactNode }) {
   const transcription = useDeepgramTranscription();
   const [connectionState, setConnectionState] = useState<PerioChartContextValue['connectionState']>('disconnected');
@@ -407,6 +447,10 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
   const [teeth, setTeeth] = useState<Record<number, ToothState>>(createInitialTeethState);
   const [commandFeedback, setCommandFeedback] = useState<CommandFeedback | null>(null);
   const [soundEnabled, setSoundEnabled] = useState(true);
+  const [debugCollapsed, setDebugCollapsed] = useState(false);
+  const [debugTimeline, setDebugTimeline] = useState<PerioDebugTimelineEvent[]>([]);
+  const [parserMode, setParserMode] = useState<ParserMode>('navigation');
+  const [expectedInput, setExpectedInput] = useState<ParserExpectation>('tooth');
   const processedTranscriptIdsRef = useRef<Set<string>>(new Set());
   const lastActiveToothRef = useRef<number | null>(1);
   const lastActiveSurfaceRef = useRef<ToothSurface | null>('buccal');
@@ -415,11 +459,12 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
   const feedbackTimerRef = useRef<number | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
 
-  const updateActiveRef = (tooth: number | null, surface: ToothSurface | null, siteIndex: number | null) => {
+ 
+  const updateActiveRef = useCallback((tooth: number | null, surface: ToothSurface | null, siteIndex: number | null) => {
     lastActiveToothRef.current = tooth;
     lastActiveSurfaceRef.current = surface;
     lastActiveSiteIndexRef.current = siteIndex;
-  };
+  }, []);
 
   const flashFeedback = useCallback((feedback: CommandFeedback) => {
     setCommandFeedback(feedback);
@@ -441,6 +486,77 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
     [soundEnabled]
   );
 
+  const pushDebugTimeline = useCallback((category: string, message: string, detail?: string) => {
+    setDebugTimeline((previous) => [
+      {
+        id: `debug-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        timestamp: Date.now(),
+        message: `${category}: ${message}`,
+        detail,
+      },
+      ...previous,
+    ].slice(0, 18));
+  }, []);
+
+  const updateParserContext = useCallback((mode: ParserMode, expectation: ParserExpectation) => {
+    setParserMode(mode);
+    setExpectedInput(expectation);
+  }, []);
+
+  const selectTooth = useCallback(
+    (tooth: number, surface?: ToothSurface | null) => {
+      snapshotChartState(historyStackRef, teeth, currentTooth, currentSurface, activeSiteIndex, lastPayload);
+      setCurrentTooth(tooth);
+      setCurrentSurface(surface ?? null);
+      setActiveSiteIndex(surface ? 0 : null);
+      updateActiveRef(tooth, surface ?? null, surface ? 0 : null);
+      updateParserContext('navigation', surface ? 'depth-triplet' : 'surface');
+      pushDebugTimeline('state', 'tooth selected', `tooth=${tooth} surface=${surface ?? 'null'}`);
+    },
+    [activeSiteIndex, currentSurface, currentTooth, historyStackRef, lastPayload, teeth, updateActiveRef, updateParserContext, pushDebugTimeline]
+  );
+
+  const selectSurface = useCallback(
+    (surface: ToothSurface) => {
+      if (currentTooth === null) {
+        return;
+      }
+
+      snapshotChartState(historyStackRef, teeth, currentTooth, currentSurface, activeSiteIndex, lastPayload);
+      setCurrentSurface(surface);
+      setActiveSiteIndex(0);
+      updateActiveRef(currentTooth, surface, 0);
+      updateParserContext('probing', 'depth-triplet');
+      pushDebugTimeline('state', 'surface selected', `tooth=${currentTooth} surface=${surface}`);
+    },
+    [activeSiteIndex, currentSurface, currentTooth, historyStackRef, lastPayload, teeth, updateActiveRef, updateParserContext, pushDebugTimeline]
+  );
+
+  const navigateTooth = useCallback(
+    (direction: 'next' | 'previous') => {
+      if (currentTooth === null) {
+        return;
+      }
+
+      const nextTooth = direction === 'next' ? getNextToothInChartOrder(currentTooth) : getPreviousToothInChartOrder(currentTooth);
+
+      if (nextTooth === null) {
+        flashFeedback({ kind: 'info', message: 'NO NEXT TOOTH' });
+        return;
+      }
+
+      snapshotChartState(historyStackRef, teeth, currentTooth, currentSurface, activeSiteIndex, lastPayload);
+      setCurrentTooth(nextTooth);
+      setActiveSiteIndex(currentSurface ? 0 : null);
+      updateActiveRef(nextTooth, currentSurface, currentSurface ? 0 : null);
+      updateParserContext('navigation', currentSurface ? 'depth-triplet' : 'surface');
+      pushDebugTimeline('command', direction, `tooth=${nextTooth} surface=${currentSurface ?? 'null'}`);
+      flashFeedback({ kind: 'jump', message: `${direction.toUpperCase()} TO TOOTH ${nextTooth}` });
+      playCommandSound('jump');
+    },
+    [activeSiteIndex, currentSurface, currentTooth, flashFeedback, historyStackRef, lastPayload, playCommandSound, pushDebugTimeline, teeth, updateActiveRef, updateParserContext]
+  );
+
   const applyUndo = useCallback(() => {
     const snapshot = historyStackRef.current.pop();
 
@@ -454,15 +570,17 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
     setCurrentSurface(snapshot.currentSurface);
     setActiveSiteIndex(snapshot.activeSiteIndex);
     updateActiveRef(snapshot.currentTooth, snapshot.currentSurface, snapshot.activeSiteIndex);
+    updateParserContext('navigation', snapshot.currentSurface ? 'depth-triplet' : snapshot.currentTooth !== null ? 'surface' : 'tooth');
     setLastPayload(snapshot.lastPayload);
     flashFeedback({ kind: 'undo', message: 'UNDO APPLIED' });
     playCommandSound('undo');
+    pushDebugTimeline('action', 'undo applied', `restored tooth=${snapshot.currentTooth ?? 'null'}`);
     console.info('[Perio UI] undo applied', {
       restoredTooth: snapshot.currentTooth,
       restoredSurface: snapshot.currentSurface,
       restoredSiteIndex: snapshot.activeSiteIndex,
     });
-  }, [flashFeedback]);
+  }, [flashFeedback, playCommandSound, pushDebugTimeline, updateActiveRef, updateParserContext]);
 
   useEffect(() => {
     console.debug('[Perio UI] chart rerendered', {
@@ -498,6 +616,7 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
       rawTranscript: latestFinal.text,
       normalizedTranscript,
     });
+    pushDebugTimeline('parser', 'final transcript received', latestFinal.text.trim());
 
     if (normalizedTranscript === 'undo') {
       applyUndo();
@@ -514,10 +633,16 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    const payload = parseTranscriptToPayload(latestFinal.text);
+    const payload = parseTranscriptToPayload(latestFinal.text, {
+      mode: parserMode,
+      expectedInput,
+      currentTooth,
+      currentSurface,
+    });
     if (!payload) {
       // No clinical payload detected — still preserve the raw final transcript
       console.info('[Perio UI] final transcript (no payload)', { text: latestFinal.text });
+      pushDebugTimeline('parser', 'no clinical payload', latestFinal.text.trim());
 
       setTranscriptEntries((previous) => {
         const nextEntry = {
@@ -535,13 +660,74 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
     }
 
     console.info('[Perio UI] parsed payload from final transcript', { payload });
+    pushDebugTimeline('parser', 'payload parsed', JSON.stringify(payload));
+
+    if (payload.command === 'undo') {
+      applyUndo();
+      setTranscriptEntries((previous) => [
+        {
+          id: `socket-undo-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          text: latestFinal.text.trim(),
+          timestamp: Date.now(),
+          source: 'deepgram' as const,
+          isFinal: true,
+        },
+        ...previous,
+      ].slice(0, 12));
+      return;
+    }
+
+    if (payload.command === 'next' || payload.command === 'previous') {
+      navigateTooth(payload.command);
+      setTranscriptEntries((previous) => [
+        {
+          id: `socket-nav-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          text: latestFinal.text.trim(),
+          timestamp: Date.now(),
+          source: 'deepgram' as const,
+          isFinal: true,
+        },
+        ...previous,
+      ].slice(0, 12));
+      return;
+    }
+
+    if (payload.explicitTooth && typeof payload.tooth === 'number' && !Array.isArray(payload.depth)) {
+      selectTooth(payload.tooth, payload.surface ? (payload.surface as ToothSurface) : null);
+      setTranscriptEntries((previous) => [
+        {
+          id: `socket-tooth-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          text: latestFinal.text.trim(),
+          timestamp: Date.now(),
+          source: 'deepgram' as const,
+          isFinal: true,
+        },
+        ...previous,
+      ].slice(0, 12));
+      return;
+    }
+
+    if (payload.surface && !Array.isArray(payload.depth) && payload.tooth === undefined) {
+      selectSurface(normalizeSurface(payload.surface));
+      setTranscriptEntries((previous) => [
+        {
+          id: `socket-surface-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          text: latestFinal.text.trim(),
+          timestamp: Date.now(),
+          source: 'deepgram' as const,
+          isFinal: true,
+        },
+        ...previous,
+      ].slice(0, 12));
+      return;
+    }
 
     if (payload.tooth !== undefined && Array.isArray(payload.depth) && payload.depth.length === SITE_COUNT) {
       flashFeedback({
         kind: 'jump',
-        message: `JUMP TO TOOTH ${payload.tooth}`,
+        message: `COMMIT TO TOOTH ${payload.tooth}`,
       });
-      playCommandSound('jump');
+      playCommandSound('chart');
     } else if (payload.bleeding) {
       flashFeedback({ kind: 'bleeding', message: 'BLEEDING SET' });
     }
@@ -562,9 +748,27 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
       updateActiveRef,
       historyStackRef,
       flashFeedback,
-      playCommandSound
+      playCommandSound,
+      pushDebugTimeline
     );
-  }, [setTeeth, transcription.segments, currentTooth, currentSurface, activeSiteIndex, lastPayload, applyUndo, flashFeedback, playCommandSound]);
+  }, [
+    setTeeth,
+    transcription.segments,
+    parserMode,
+    expectedInput,
+    currentTooth,
+    currentSurface,
+    activeSiteIndex,
+    lastPayload,
+    applyUndo,
+    flashFeedback,
+    playCommandSound,
+    pushDebugTimeline,
+    navigateTooth,
+    selectTooth,
+    selectSurface,
+    updateActiveRef,
+  ]);
 
   useEffect(() => {
     if (!soundEnabled && audioContextRef.current) {
@@ -581,6 +785,44 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
       console.debug('[Perio UI] interim transcript update', transcription.interimTranscript);
     }
   }, [transcription.interimTranscript]);
+
+  const transcriptionError = transcription.error;
+
+  const debug = useMemo<PerioDebugState>(
+    () => ({
+      available: true,
+      collapsed: debugCollapsed,
+      finalTranscript: transcripts.find((entry) => entry.isFinal)?.text ?? '',
+      interimTranscript: transcription.interimTranscript,
+      stream: transcripts.map<PerioDebugStreamEntry>((entry) => ({
+        id: entry.id,
+        label: entry.isFinal ? 'FINAL' : 'INTERIM',
+        text: entry.text,
+        timestamp: entry.timestamp,
+      })),
+      parserState: {
+        tooth: currentTooth,
+        surface: currentSurface,
+        mode: parserMode,
+        expectedInput,
+        status: transcriptionError ? 'error' : connectionState,
+      },
+      actionLog: debugTimeline.map((event) => `${event.message}${event.detail ? ` - ${event.detail}` : ''}`),
+      timeline: debugTimeline,
+    }),
+    [
+      connectionState,
+      currentSurface,
+      currentTooth,
+      debugCollapsed,
+      debugTimeline,
+      expectedInput,
+      parserMode,
+      transcripts,
+      transcription.interimTranscript,
+      transcriptionError,
+    ]
+  );
 
   const value = useMemo<PerioChartContextValue>(
     () => ({
@@ -600,6 +842,8 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
       setSoundEnabled,
       startRecording: transcription.startRecording,
       stopRecording: transcription.stopRecording,
+      debug,
+      toggleDebugCollapsed: () => setDebugCollapsed((previous) => !previous),
       teeth,
     }),
     [
@@ -615,6 +859,7 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
       transcription.error,
       commandFeedback,
       soundEnabled,
+      debug,
       transcription.interimTranscript,
       transcription.isRecording,
       transcription.startRecording,

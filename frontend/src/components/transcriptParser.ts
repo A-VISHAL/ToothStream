@@ -1,5 +1,16 @@
 import type { PerioPayload, ToothSurface } from '../types';
 
+type ParserMode = 'idle' | 'navigation' | 'probing';
+
+type ParserExpectation = 'tooth' | 'surface' | 'depth-triplet';
+
+export interface TranscriptParseContext {
+  mode: ParserMode;
+  expectedInput: ParserExpectation;
+  currentTooth?: number | null;
+  currentSurface?: ToothSurface | null;
+}
+
 const NUMBER_WORDS: Record<string, number> = {
   zero: 0,
   one: 1,
@@ -12,6 +23,15 @@ const NUMBER_WORDS: Record<string, number> = {
   eight: 8,
   nine: 9,
   ten: 10,
+  eleven: 11,
+  twelve: 12,
+  thirteen: 13,
+  fourteen: 14,
+  fifteen: 15,
+  sixteen: 16,
+  seventeen: 17,
+  eighteen: 18,
+  nineteen: 19,
 };
 
 const TENS_WORDS: Record<string, number> = {
@@ -24,8 +44,6 @@ const HOMOPHONE_NORMALIZATIONS: Record<string, string> = {
   for: 'four',
   free: 'three',
 };
-
-const TOOTH_PREFIXES = new Set(['tooth', 'to', 'too', 'two']);
 
 function normalizeWord(word: string): string {
   return HOMOPHONE_NORMALIZATIONS[word.toLowerCase()] ?? word.toLowerCase();
@@ -88,40 +106,37 @@ function parseToothNumberTokens(tokens: string[]): { tooth: number | null; consu
   return { tooth: null, consumed: 0 };
 }
 
-function extractDepths(transcript: string): number[] | undefined {
-  const tokens = tokenize(transcript).filter((token) => token in NUMBER_WORDS || /^\d+$/.test(token));
+function parseDepthTriplet(tokens: string[]): number[] | undefined {
+  if (tokens.length === 1) {
+    const token = tokens[0] ?? '';
+
+    if (/^\d{3}$/.test(token)) {
+      return token.split('').map((digit) => Number.parseInt(digit, 10));
+    }
+  }
+
   const values = tokens.map(parseNumberToken).filter((value): value is number => value !== null);
 
-  if (values.length < 3) {
+  if (values.length !== 3) {
     return undefined;
   }
 
   return [values[0], values[1], values[2]];
 }
 
-function extractTooth(transcript: string): number | undefined {
-  const tokens = tokenize(transcript);
-
+function extractTooth(tokens: string[]): number | undefined {
   for (let index = 0; index < tokens.length; index += 1) {
-    const token = tokens[index];
-
-    if (!TOOTH_PREFIXES.has(token)) {
+    if (tokens[index] !== 'tooth') {
       continue;
     }
 
-    const valueOffset = tokens[index + 1] === 'tooth' ? 2 : 1;
-    const parsed = parseToothNumberTokens(tokens.slice(index + valueOffset));
+    const parsed = parseToothNumberTokens(tokens.slice(index + 1));
 
     if (parsed.tooth === null || parsed.tooth < 1 || parsed.tooth > 32) {
       continue;
     }
 
-    const trailingTokens = tokens.slice(index + valueOffset + parsed.consumed);
-    const hasNumericTrailingToken = trailingTokens.some((nextToken) => parseNumberToken(nextToken) !== null);
-
-    if (!hasNumericTrailingToken || token === 'tooth') {
-      return parsed.tooth;
-    }
+    return parsed.tooth;
   }
 
   return undefined;
@@ -155,23 +170,48 @@ function extractSiteIndex(transcript: string): number | undefined {
   return undefined;
 }
 
-export function parseTranscriptToPayload(transcript: string): PerioPayload | null {
+function detectCommand(tokens: string[]): PerioPayload['command'] | undefined {
+  if (tokens.length !== 1) {
+    return undefined;
+  }
+
+  const token = tokens[0];
+
+  if (token === 'bleeding' || token === 'missing' || token === 'implant' || token === 'undo' || token === 'next' || token === 'previous') {
+    return token;
+  }
+
+  return undefined;
+}
+
+function shouldParseDepthTriplet(context: TranscriptParseContext | undefined, tokens: string[]): boolean {
+  if (context?.mode === 'probing' || context?.expectedInput === 'depth-triplet') {
+    return true;
+  }
+
+  return false;
+}
+
+export function parseTranscriptToPayload(transcript: string, context?: TranscriptParseContext): PerioPayload | null {
   const cleaned = transcript.trim();
   const normalizedTranscript = normalizeClinicalTranscript(cleaned);
+  const tokens = tokenize(cleaned);
 
   if (!cleaned) {
     return null;
   }
 
-  const tooth = extractTooth(normalizedTranscript);
+  const command = detectCommand(tokens);
+  const tooth = extractTooth(tokens);
   const surface = extractSurface(normalizedTranscript);
   const siteIndex = extractSiteIndex(normalizedTranscript);
-  const depth = extractDepths(normalizedTranscript);
-  const bleeding = /\bbleed(?:ing)?\b/i.test(normalizedTranscript);
-  const missing = /\bmissing\b/i.test(normalizedTranscript);
-  const implant = /\bimplant\b/i.test(normalizedTranscript);
+  const depth = shouldParseDepthTriplet(context, tokens) ? parseDepthTriplet(tokens) : undefined;
+  const bleeding = command === 'bleeding' || /\bbleed(?:ing)?\b/i.test(normalizedTranscript);
+  const missing = command === 'missing' || /\bmissing\b/i.test(normalizedTranscript);
+  const implant = command === 'implant' || /\bimplant\b/i.test(normalizedTranscript);
 
   if (
+    command === undefined &&
     tooth === undefined &&
     depth === undefined &&
     surface === undefined &&
@@ -185,8 +225,8 @@ export function parseTranscriptToPayload(transcript: string): PerioPayload | nul
 
   return {
     tooth,
-    // whether the speaker explicitly said "tooth"
-    explicitTooth: normalizeClinicalTranscript(transcript).split(' ').includes('tooth'),
+    explicitTooth: tokens.includes('tooth'),
+    command,
     surface,
     depth,
     bleeding,

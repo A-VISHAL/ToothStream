@@ -2,10 +2,23 @@ import type React from 'react';
 
 export type ToothSurface = 'buccal' | 'lingual';
 
+export type ToothMorphologyVariant =
+  | 'incisor-central'
+  | 'incisor-lateral'
+  | 'canine-maxillary'
+  | 'canine-mandibular'
+  | 'premolar-first'
+  | 'premolar-second'
+  | 'molar-first'
+  | 'molar-second'
+  | 'molar-third';
+
 export type ConnectionState = 'connecting' | 'connected' | 'listening' | 'reconnecting' | 'disconnected' | 'error';
 
 export interface PerioPayload {
   tooth?: number;
+  explicitTooth?: boolean;
+  command?: 'bleeding' | 'missing' | 'implant' | 'undo' | 'next' | 'previous';
   surface?: string;
   depth?: number[];
   bleeding?: boolean;
@@ -49,6 +62,39 @@ export interface TranscriptEntry {
   isFinal?: boolean;
 }
 
+export interface PerioDebugStreamEntry {
+  id: string;
+  label: 'INTERIM' | 'FINAL' | 'SOCKET';
+  text: string;
+  timestamp: number;
+}
+
+export interface PerioDebugTimelineEvent {
+  id: string;
+  timestamp: number;
+  message: string;
+  detail?: string;
+}
+
+export interface PerioDebugParserState {
+  tooth: number | null;
+  surface: ToothSurface | null;
+  mode: string;
+  expectedInput: string;
+  status: string;
+}
+
+export interface PerioDebugState {
+  available: boolean;
+  collapsed: boolean;
+  finalTranscript: string;
+  interimTranscript: string;
+  stream: PerioDebugStreamEntry[];
+  parserState: PerioDebugParserState;
+  actionLog: string[];
+  timeline: PerioDebugTimelineEvent[];
+}
+
 export type LiveTranscriptState = 'disconnected' | 'connecting' | 'connected' | 'listening' | 'reconnecting' | 'error';
 
 export interface PerioChartContextValue {
@@ -68,5 +114,7 @@ export interface PerioChartContextValue {
   setSoundEnabled: React.Dispatch<React.SetStateAction<boolean>>;
   startRecording: () => Promise<void>;
   stopRecording: () => Promise<void>;
+  debug: PerioDebugState;
+  toggleDebugCollapsed: () => void;
   teeth: Record<number, ToothState>;
 }
