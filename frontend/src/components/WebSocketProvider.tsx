@@ -284,6 +284,7 @@ function ingestPayload(
     typeof hydrated.siteIndex === 'number';
 
   const toothNumber = typeof hydrated.tooth === 'number' ? hydrated.tooth : fallbackTooth;
+  const toothWasImplant = toothNumber !== null ? currentTeeth[toothNumber]?.implant === true : false;
   const surface = normalizeSurface(hydrated.surface) ?? fallbackSurface ?? 'buccal';
   const siteIndex = clampSiteIndex(hydrated.siteIndex ?? fallbackSiteIndex ?? undefined);
   const commandLabel =
@@ -411,6 +412,19 @@ function ingestPayload(
     const nextTeeth = { ...previous };
     const nextTooth = { ...target };
 
+    console.info('[Perio UI] before merge', {
+      toothNumber,
+      surface,
+      missing: nextTooth.missing,
+      implant: nextTooth.implant,
+      buccal: nextTooth.buccal,
+      lingual: nextTooth.lingual,
+    });
+    console.info('[Perio UI] implant before merge', {
+      toothNumber,
+      implant: nextTooth.implant,
+    });
+
     if (hydrated.missing === true) {
       nextTooth.missing = true;
       nextTooth.implant = false;
@@ -435,16 +449,12 @@ function ingestPayload(
 
     if (hasTriplet && Array.isArray(hydrated.depth)) {
       nextTooth[surface] = {
+        ...nextTooth[surface],
         depth: [hydrated.depth[0] ?? 0, hydrated.depth[1] ?? 0, hydrated.depth[2] ?? 0],
-        bleeding: Boolean(hydrated.bleeding),
+        bleeding: nextTooth[surface].bleeding || Boolean(hydrated.bleeding),
         siteIndex,
         updatedAt: receivedAt,
       };
-
-      if (!hydrated.missing && !hydrated.implant) {
-        nextTooth.missing = false;
-        nextTooth.implant = false;
-      }
     }
 
     nextTooth.updatedAt = receivedAt;
@@ -460,6 +470,20 @@ function ingestPayload(
     pushDebugTimeline('chart', 'chart updated', `tooth=${toothNumber} surface=${surface} bleeding=${nextTooth[surface].bleeding}`);
 
     if (hasTriplet && Array.isArray(hydrated.depth)) {
+      console.info('[Perio UI] after merge', {
+        toothNumber,
+        surface,
+        implantPersisted: nextTooth.implant === true,
+        bleedingPersisted: nextTooth[surface].bleeding === true,
+        mergedSurface: nextTooth[surface],
+      });
+      console.info('[Perio UI] implant after merge', {
+        toothNumber,
+        implant: nextTooth.implant,
+      });
+      pushDebugTimeline('chart', 'surface merged', `tooth=${toothNumber} surface=${surface}`);
+      pushDebugTimeline('chart', `implant persisted=${nextTooth.implant === true}`, `tooth=${toothNumber}`);
+      pushDebugTimeline('chart', `bleeding persisted=${nextTooth[surface].bleeding === true}`, `surface=${surface}`);
       console.info('[Perio UI] triplet committed', {
         tooth: toothNumber,
         surface,
@@ -471,7 +495,7 @@ function ingestPayload(
   });
 
   if (hasTriplet) {
-    const nextTooth = getNextToothInChartOrder(toothNumber) ?? toothNumber;
+    const nextTooth = toothWasImplant ? toothNumber : getNextToothInChartOrder(toothNumber) ?? toothNumber;
 
     setCurrentTooth(nextTooth);
     setCurrentSurface(surface);

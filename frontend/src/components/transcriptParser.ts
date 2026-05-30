@@ -46,6 +46,12 @@ const HOMOPHONE_NORMALIZATIONS: Record<string, string> = {
   toof: 'tooth',
   teeth: 'tooth',
   tooths: 'tooth',
+  toothh: 'tooth',
+  sevn: 'seven',
+  thru: 'three',
+  through: 'three',
+  tree: 'three',
+  twos: 'tooth',
 };
 
 function normalizeWord(word: string): string {
@@ -55,14 +61,23 @@ function normalizeWord(word: string): string {
 function tokenize(transcript: string): string[] {
   return transcript
     .trim()
-    .split(/\s+/)
-    .map((token) => token.replace(/[^a-z0-9]/gi, ''))
+    .split(/[^a-z0-9]+/gi)
     .filter(Boolean)
     .map(normalizeWord);
 }
 
 function normalizeClinicalTranscript(transcript: string): string {
-  return tokenize(transcript).join(' ');
+  return transcript
+    .trim()
+    .toLowerCase()
+    .replace(/\btwo\s+to\b/g, 'tooth')
+    .replace(/\btooth\s+number\b/g, 'tooth')
+    .replace(/\btoothh\b/g, 'tooth')
+    .replace(/\btoof\b/g, 'tooth')
+    .replace(/\bteeth\b/g, 'tooth')
+    .replace(/\btwos\b/g, 'tooth')
+    .replace(/\btooths\b/g, 'tooth')
+    .replace(/\s+/g, ' ');
 }
 
 function parseNumberToken(token: string): number | null {
@@ -109,6 +124,14 @@ function parseToothNumberTokens(tokens: string[]): { tooth: number | null; consu
   return { tooth: null, consumed: 0 };
 }
 
+function describeToothNumber(tooth: number | null, explicitTooth: boolean): string {
+  if (typeof tooth !== 'number') {
+    return 'tooth=null';
+  }
+
+  return `tooth=${tooth}${explicitTooth ? ' explicit' : ''}`;
+}
+
 function parseDepthTriplet(tokens: string[]): number[] | undefined {
   if (tokens.length === 1) {
     const token = tokens[0] ?? '';
@@ -131,11 +154,14 @@ function extractTooth(tokens: string[], context?: TranscriptParseContext): numbe
   const expectedToothSelection = context?.mode !== 'probing' && context?.expectedInput !== 'depth-triplet';
 
   for (let index = 0; index < tokens.length; index += 1) {
-    if (tokens[index] !== 'tooth') {
+    const token = tokens[index];
+
+    if (token !== 'tooth') {
       continue;
     }
 
-    const parsed = parseToothNumberTokens(tokens.slice(index + 1));
+    const tail = tokens.slice(index + 1);
+    const parsed = parseToothNumberTokens(tail[0] === 'number' ? tail.slice(1) : tail);
 
     if (parsed.tooth === null || parsed.tooth < 1 || parsed.tooth > 32) {
       continue;
@@ -220,20 +246,30 @@ function shouldParseDepthTriplet(context: TranscriptParseContext | undefined, to
 export function parseTranscriptToPayload(transcript: string, context?: TranscriptParseContext): PerioPayload | null {
   const cleaned = transcript.trim();
   const normalizedTranscript = normalizeClinicalTranscript(cleaned);
-  const tokens = tokenize(cleaned);
+  const tokens = tokenize(normalizedTranscript);
 
   if (!cleaned) {
     return null;
   }
 
   const command = detectCommand(tokens);
+  const explicitTooth = tokens.includes('tooth');
   const tooth = extractTooth(tokens, context);
   const surface = extractSurface(normalizedTranscript);
   const siteIndex = extractSiteIndex(normalizedTranscript);
-  const depth = shouldParseDepthTriplet(context, tokens) ? parseDepthTriplet(tokens) : undefined;
+  const depth = explicitTooth ? undefined : shouldParseDepthTriplet(context, tokens) ? parseDepthTriplet(tokens) : undefined;
   const bleeding = command === 'bleeding' || /\bbleed(?:ing)?\b/i.test(normalizedTranscript);
   const missing = command === 'missing' || /\bmissing\b/i.test(normalizedTranscript);
   const implant = command === 'implant' || /\bimplant\b/i.test(normalizedTranscript);
+
+  console.info('[Perio Parser] RAW transcript', cleaned);
+  console.info('[Perio Parser] NORMALIZED transcript', normalizedTranscript);
+  console.info('[Perio Parser] tooth parser result', {
+    explicitTooth,
+    tooth,
+    decision: describeToothNumber(tooth ?? null, explicitTooth),
+  });
+  console.info('[Perio Parser] ACTION', tooth !== undefined ? `tooth=${tooth}` : depth ? `depth=${depth.join(',')}` : 'none');
 
   if (
     command === undefined &&
@@ -250,7 +286,7 @@ export function parseTranscriptToPayload(transcript: string, context?: Transcrip
 
   return {
     tooth,
-    explicitTooth: tokens.includes('tooth'),
+    explicitTooth,
     command,
     surface,
     depth,
