@@ -131,9 +131,8 @@ export function Tooth({ tooth, activeTooth, activeSurface, activeSiteIndex }: To
   return (
     <div
       className={`relative w-[116px] shrink-0 rounded-3xl border transition-all duration-200 ${
-        isActive ? 'border-cyan-400 bg-cyan-50/70 shadow-[0_18px_38px_rgba(14,165,233,0.15)] chart-pop active-tooth' : 'border-slate-200/80 bg-white/75'
+        isActive ? 'border-cyan-400 bg-cyan-50/70 shadow-[0_18px_38px_rgba(14,165,233,0.15)] chart-pop' : 'border-slate-200/80 bg-white/75'
       } ${isMissing ? 'opacity-55' : ''}`}
-      aria-current={isActive ? 'true' : undefined}
     >
       <svg viewBox="0 0 120 170" className="h-[170px] w-full overflow-visible" shapeRendering="geometricPrecision" textRendering="geometricPrecision">
         <defs>
