@@ -288,6 +288,12 @@ function ingestPayload(
     implant: hydrated.implant === true,
   });
   pushDebugTimeline('chart', 'commit started', `tooth=${toothNumber} surface=${surface} triplet=${hasTriplet}`);
+  console.info('[Perio UI] commit target', {
+    toothNumber,
+    surface,
+    siteIndex: resolvedCursorSiteIndex,
+    depth: hasTriplet ? hydrated.depth : null,
+  });
 
   setCurrentTooth(resolvedCursorTooth);
   setCurrentSurface(surface);
@@ -385,9 +391,17 @@ function ingestPayload(
       surface,
       depth: nextTooth[surface].depth,
       bleeding: nextTooth[surface].bleeding,
+      depthVisible: nextTooth[surface].depth.some((value) => value > 0),
     });
     pushDebugTimeline('action', 'tooth state updated', `tooth=${toothNumber} surface=${surface}`);
     pushDebugTimeline('chart', 'chart updated', `tooth=${toothNumber} surface=${surface} bleeding=${nextTooth[surface].bleeding}`);
+    console.info('[Perio UI] chart state updated', {
+      toothNumber,
+      surface,
+      siteIndex,
+      depth: nextTooth[surface].depth,
+      depthVisible: nextTooth[surface].depth.some((value) => value > 0),
+    });
 
     if (hasTriplet && Array.isArray(hydrated.depth)) {
       console.info('[Perio UI] after merge', {

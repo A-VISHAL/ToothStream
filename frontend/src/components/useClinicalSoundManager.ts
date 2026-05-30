@@ -29,39 +29,46 @@ type SoundProfile = {
   masterGain: number;
 };
 
+const DEBUG_AUDIO_TUNING_MODE = true;
+
 const SOUND_LIBRARY: Record<ClinicalSoundType, SoundProfile> = {
   navigation: {
-    masterGain: 0.045,
+    masterGain: DEBUG_AUDIO_TUNING_MODE ? 0.24 : 0.07,
     steps: [
-      { frequency: 1580, duration: 0.024, delay: 0, gain: 0.018, waveform: 'sine' },
-      { frequency: 1210, duration: 0.018, delay: 0.022, gain: 0.012, waveform: 'triangle' },
+      { frequency: 1120, duration: DEBUG_AUDIO_TUNING_MODE ? 0.18 : 0.06, delay: 0, gain: DEBUG_AUDIO_TUNING_MODE ? 0.18 : 0.03, waveform: 'sine' },
+      { frequency: 960, duration: DEBUG_AUDIO_TUNING_MODE ? 0.14 : 0.042, delay: DEBUG_AUDIO_TUNING_MODE ? 0.08 : 0.028, gain: DEBUG_AUDIO_TUNING_MODE ? 0.14 : 0.02, waveform: 'triangle' },
     ],
   },
   commit: {
-    masterGain: 0.05,
+    masterGain: DEBUG_AUDIO_TUNING_MODE ? 0.26 : 0.075,
     steps: [
-      { frequency: 920, duration: 0.03, delay: 0, gain: 0.019, waveform: 'sine' },
-      { frequency: 740, duration: 0.024, delay: 0.018, gain: 0.013, waveform: 'triangle' },
+      { frequency: 860, duration: DEBUG_AUDIO_TUNING_MODE ? 0.2 : 0.07, delay: 0, gain: DEBUG_AUDIO_TUNING_MODE ? 0.2 : 0.033, waveform: 'sine' },
+      { frequency: 720, duration: DEBUG_AUDIO_TUNING_MODE ? 0.16 : 0.05, delay: DEBUG_AUDIO_TUNING_MODE ? 0.085 : 0.026, gain: DEBUG_AUDIO_TUNING_MODE ? 0.16 : 0.022, waveform: 'triangle' },
     ],
   },
   bleeding: {
-    masterGain: 0.04,
+    masterGain: DEBUG_AUDIO_TUNING_MODE ? 0.28 : 0.065,
     steps: [
-      { frequency: 784, duration: 0.032, delay: 0, gain: 0.015, waveform: 'sine' },
-      { frequency: 1046.5, duration: 0.04, delay: 0.028, gain: 0.012, waveform: 'sine' },
+      { frequency: 1380, duration: DEBUG_AUDIO_TUNING_MODE ? 0.2 : 0.08, delay: 0, gain: DEBUG_AUDIO_TUNING_MODE ? 0.2 : 0.025, waveform: 'sine' },
+      { frequency: 1490, duration: DEBUG_AUDIO_TUNING_MODE ? 0.16 : 0.055, delay: DEBUG_AUDIO_TUNING_MODE ? 0.08 : 0.03, gain: DEBUG_AUDIO_TUNING_MODE ? 0.16 : 0.018, waveform: 'sine' },
     ],
   },
   undo: {
-    masterGain: 0.05,
+    masterGain: DEBUG_AUDIO_TUNING_MODE ? 0.24 : 0.07,
     steps: [
-      { frequency: 880, duration: 0.026, delay: 0, gain: 0.015, waveform: 'triangle' },
-      { frequency: 540, duration: 0.04, delay: 0.022, gain: 0.013, waveform: 'sine' },
+      { frequency: 880, duration: DEBUG_AUDIO_TUNING_MODE ? 0.18 : 0.07, delay: 0, gain: DEBUG_AUDIO_TUNING_MODE ? 0.18 : 0.03, waveform: 'triangle' },
+      { frequency: 620, duration: DEBUG_AUDIO_TUNING_MODE ? 0.18 : 0.06, delay: DEBUG_AUDIO_TUNING_MODE ? 0.1 : 0.03, gain: DEBUG_AUDIO_TUNING_MODE ? 0.16 : 0.022, waveform: 'sine' },
     ],
   },
   acknowledgment: {
-    masterGain: 0.035,
-    steps: [{ frequency: 620, duration: 0.05, delay: 0, gain: 0.012, waveform: 'sine' }],
+    masterGain: DEBUG_AUDIO_TUNING_MODE ? 0.22 : 0.05,
+    steps: [{ frequency: 680, duration: DEBUG_AUDIO_TUNING_MODE ? 0.16 : 0.06, delay: 0, gain: DEBUG_AUDIO_TUNING_MODE ? 0.16 : 0.018, waveform: 'sine' }],
   },
+};
+
+const DEBUG_TEST_SOUND: SoundProfile = {
+  masterGain: 0.3,
+  steps: [{ frequency: 620, duration: 0.4, delay: 0, gain: 0.2, waveform: 'sine' }],
 };
 
 type AudioContextConstructor = typeof AudioContext;
@@ -136,6 +143,19 @@ function scheduleSound(audioContext: AudioContext, profile: SoundProfile) {
   output.connect(audioContext.destination);
 
   const now = audioContext.currentTime;
+  const lastStep = profile.steps[profile.steps.length - 1];
+
+  console.info('[Perio UI][Audio] scheduling', {
+    audioContextState: audioContext.state,
+    masterGain: profile.masterGain,
+    steps: profile.steps.map((step) => ({
+      frequency: step.frequency,
+      gain: step.gain,
+      durationMs: Math.round(step.duration * 1000),
+      delayMs: Math.round(step.delay * 1000),
+      waveform: step.waveform,
+    })),
+  });
 
   for (const step of profile.steps) {
     const oscillator = audioContext.createOscillator();
@@ -148,9 +168,16 @@ function scheduleSound(audioContext: AudioContext, profile: SoundProfile) {
     filter.Q.value = 0.8;
 
     const stepGain = audioContext.createGain();
-    stepGain.gain.setValueAtTime(0.0001, now + step.delay);
-    stepGain.gain.linearRampToValueAtTime(step.gain, now + step.delay + 0.007);
-    stepGain.gain.exponentialRampToValueAtTime(0.0001, now + step.delay + step.duration);
+    stepGain.gain.setValueAtTime(0.0005, now + step.delay);
+    stepGain.gain.linearRampToValueAtTime(step.gain, now + step.delay + 0.02);
+    stepGain.gain.exponentialRampToValueAtTime(0.0005, now + step.delay + step.duration);
+
+    console.info('[Perio UI][Audio] oscillator setup', {
+      frequency: step.frequency,
+      oscillatorGain: step.gain,
+      durationMs: Math.round(step.duration * 1000),
+      masterGain: profile.masterGain,
+    });
 
     oscillator.connect(filter);
     filter.connect(stepGain);
@@ -168,7 +195,31 @@ function scheduleSound(audioContext: AudioContext, profile: SoundProfile) {
 
   window.setTimeout(() => {
     output.disconnect();
-  }, 250);
+  }, Math.max(250, Math.round(((lastStep?.delay ?? 0) + (lastStep?.duration ?? 0.06)) * 1000) + 50));
+}
+
+async function playDebugTestSound(audioContextRef: React.MutableRefObject<AudioContext | null>) {
+  const audioContext = await ensureAudioContext(audioContextRef, 'manual');
+
+  if (!audioContext) {
+    logAudioEvent('failure', { trigger: 'manual', reason: 'context-missing' });
+    return false;
+  }
+
+  if (audioContext.state === 'suspended') {
+    await audioContext.resume();
+  }
+
+  console.info('[Perio UI][Audio] playTestSound', {
+    audioContextState: audioContext.state,
+    masterGain: DEBUG_TEST_SOUND.masterGain,
+    oscillatorGain: DEBUG_TEST_SOUND.steps[0]?.gain,
+    durationMs: Math.round((DEBUG_TEST_SOUND.steps[0]?.duration ?? 0) * 1000),
+  });
+
+  scheduleSound(audioContext, DEBUG_TEST_SOUND);
+  logAudioEvent('success', { sound: 'acknowledgment', trigger: 'manual', reason: 'playTestSound' });
+  return true;
 }
 
 export function useClinicalSoundManager(enabled: boolean) {
@@ -227,6 +278,12 @@ export function useClinicalSoundManager(enabled: boolean) {
           unlockedRef.current = true;
         }
 
+        const profile = SOUND_LIBRARY[sound];
+        const toneSummary = profile.steps
+          .map((step) => `f=${step.frequency}Hz d=${Math.round(step.duration * 1000)}ms g=${step.gain}`)
+          .join(' | ');
+
+        console.info(`[Perio UI][Audio] sound=${sound} trigger=${trigger} frequency=${toneSummary} masterGain=${profile.masterGain}`);
         scheduleSound(audioContext, SOUND_LIBRARY[sound]);
         logAudioEvent('success', { sound, trigger });
         return true;
@@ -269,5 +326,6 @@ export function useClinicalSoundManager(enabled: boolean) {
   return {
     unlockAudio,
     playSound,
+    playTestSound: () => playDebugTestSound(audioContextRef),
   };
 }

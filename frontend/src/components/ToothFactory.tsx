@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import { RealCanineSVG } from './RealCanineSVG';
 import { RealIncisorSVG, type ToothAnatomyProps, type ToothMorphologyVariant } from './RealIncisorSVG';
 import { RealMolarSVG } from './RealMolarSVG';
@@ -85,6 +85,7 @@ function familyNode({ family, ...props }: ToothAnatomyProps & { family: ToothFam
 }
 
 function SiteOverlay({
+  toothNumber,
   isActiveTooth,
   surface,
   activeSurface,
@@ -92,6 +93,7 @@ function SiteOverlay({
   depth,
   bleeding,
 }: {
+  toothNumber: number;
   isActiveTooth: boolean;
   surface: ToothSurface;
   activeSurface: ToothSurface | null;
@@ -100,11 +102,23 @@ function SiteOverlay({
   bleeding: boolean;
 }) {
   const isActiveSurface = isActiveTooth && surface === activeSurface;
+  const depthVisible = depth.some((value) => value > 0);
   const topSurface = surface === 'lingual';
   const baseY = topSurface ? 22 : 138;
   const labelY = topSurface ? 8 : 168;
   const connectorY = topSurface ? 40 : 120;
   const direction = topSurface ? 1 : -1;
+
+  useEffect(() => {
+    console.debug('[Perio UI] depth visible', {
+      tooth: toothNumber,
+      surface,
+      activeSurface,
+      activeSiteIndex,
+      depth,
+      depthVisible,
+    });
+  }, [activeSiteIndex, activeSurface, depth, depthVisible, surface, toothNumber]);
 
   return (
     <g>
@@ -260,6 +274,18 @@ export function ToothFactory({ tooth, toothNumber, arch, positionIndex, activeTo
   const fill = `url(#${shadowId}-fill)`;
   const stroke = isActive ? '#0ea5e9' : '#b9c6d4';
 
+  useEffect(() => {
+    console.debug('[Perio UI] render triggered', {
+      toothNumber,
+      arch,
+      activeTooth,
+      activeSurface,
+      activeSiteIndex,
+      buccalDepth: tooth.buccal.depth,
+      lingualDepth: tooth.lingual.depth,
+    });
+  }, [activeSiteIndex, activeSurface, activeTooth, arch, tooth.buccal.depth, tooth.lingual.depth, toothNumber]);
+
   console.debug('[Perio UI] render tooth factory', {
     toothNumber,
     arch,
@@ -309,6 +335,7 @@ export function ToothFactory({ tooth, toothNumber, arch, positionIndex, activeTo
       </g>
 
       <SiteOverlay
+        toothNumber={toothNumber}
         isActiveTooth={isActive}
         surface="lingual"
         activeSurface={activeSurface}
@@ -318,6 +345,7 @@ export function ToothFactory({ tooth, toothNumber, arch, positionIndex, activeTo
       />
 
       <SiteOverlay
+        toothNumber={toothNumber}
         isActiveTooth={isActive}
         surface="buccal"
         activeSurface={activeSurface}
