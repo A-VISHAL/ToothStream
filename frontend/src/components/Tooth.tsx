@@ -102,6 +102,20 @@ function SiteGroup({
             {surfaceState.bleeding ? (
               <circle cx="9" cy="-9" r="3.5" fill="#ef4444" className={isActiveSite ? 'pulse-bleed' : undefined} />
             ) : null}
+            {surfaceState.healthy ? (
+              <g>
+                <circle cx="-9" cy="-9" r="3.2" fill="#22c55e" stroke="#ffffff" strokeWidth="0.9" />
+                <path d="M-10 -9L-8.6 -7.6L-6.2 -10.1" fill="none" stroke="#ffffff" strokeWidth="1.1" strokeLinecap="round" strokeLinejoin="round" />
+              </g>
+            ) : null}
+            {typeof surfaceState.recession !== 'undefined' && surfaceState.recession !== false ? (
+              <g transform="translate(0, 19)">
+                <rect x="-14" y="-7" width="28" height="14" rx="7" fill="#fff7ed" stroke="#f59e0b" strokeWidth="0.9" />
+                <text x="0" y="0" textAnchor="middle" dominantBaseline="middle" fontSize="9" fontWeight="800" fill="#b45309">
+                  R{typeof surfaceState.recession === 'number' ? surfaceState.recession : ''}
+                </text>
+              </g>
+            ) : null}
           </g>
         );
       })}
@@ -127,6 +141,16 @@ export function Tooth({ tooth, activeTooth, activeSurface, activeSiteIndex }: To
   const isImplant = tooth.implant;
 
   const topLabel = useMemo(() => 'L', []);
+
+  React.useEffect(() => {
+    console.info('FINDING_RENDER_CHECK', {
+      tooth: tooth.toothNumber,
+      bleeding: tooth.buccal.bleeding || tooth.lingual.bleeding,
+      healthy: tooth.buccal.healthy || tooth.lingual.healthy,
+      recession: tooth.buccal.recession ?? tooth.lingual.recession,
+      implant: tooth.implant,
+    });
+  }, [tooth]);
 
   return (
     <div

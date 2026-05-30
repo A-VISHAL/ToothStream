@@ -23,6 +23,8 @@ function createSurfaceState(): ToothSurfaceState {
   return {
     depth: [0, 0, 0],
     bleeding: false,
+    healthy: false,
+    recession: undefined,
     siteIndex: 1,
     updatedAt: 0,
   };
@@ -70,6 +72,14 @@ interface ChartSnapshot {
   lastPayload: PerioPayload | null;
   parserMode: ParserMode;
   expectedInput: ParserExpectation;
+}
+
+interface TripletContext {
+  tooth: number;
+  surface: ToothSurface;
+  siteIndex: number;
+  depth: [number, number, number];
+  timestamp: number;
 }
 
 function normalizeSurface(surface?: string): ToothSurface {
@@ -138,6 +148,9 @@ function hydratePayload(payload: PerioPayload): PerioPayload {
   };
 }
 
+type FindingSound = 'acknowledgment' | 'commit';
+
+
 function ingestPayload(
   payload: PerioPayload,
   currentTeeth: Record<number, ToothState>,
@@ -157,18 +170,24 @@ function ingestPayload(
   fallbackSiteIndex: number | null,
   updateActiveRef: (tooth: number | null, surface: ToothSurface | null, siteIndex: number | null) => void,
   updateParserContext: (mode: ParserMode, expectation: ParserExpectation) => void,
+  lastCommittedToothRef: React.MutableRefObject<number | null>,
+  lastTripletContextRef: React.MutableRefObject<TripletContext | null>,
+  implantContextActiveRef: React.MutableRefObject<boolean>,
   toothCommitPendingRef: React.MutableRefObject<boolean>,
   awaitingAdditionalFindingsRef: React.MutableRefObject<boolean>,
   logToothWorkflow: (event: 'AUTO_ADVANCE_BLOCKED' | 'WAITING_FOR_FINDINGS' | 'TOOTH_FINALIZED' | 'AUTO_ADVANCE_ALLOWED', detail: string) => void,
   historyStackRef: React.MutableRefObject<ChartSnapshot[]>,
   flashFeedback: (feedback: CommandFeedback) => void,
   playSound: (kind: ClinicalSoundType, trigger?: ClinicalSoundTrigger) => void,
+  triggerClinicalSound: (sound: FindingSound, trigger: ClinicalSoundTrigger, reason: string) => void,
   pushDebugTimeline: (category: string, message: string, detail?: string) => void
 ) {
   const hydrated = hydratePayload(payload);
   const receivedAt = Date.now();
   const payloadTimestamp = hydrated.timestamp ?? receivedAt;
   const hasTriplet = Array.isArray(hydrated.depth) && hydrated.depth.length === SITE_COUNT && !hydrated.missing;
+  const currentCommittedTooth = lastCommittedToothRef.current ?? fallbackTooth;
+  const previousTripletContext = lastTripletContextRef.current;
   const shouldSnapshot =
     typeof hydrated.tooth === 'number' ||
     hasTriplet ||
@@ -185,6 +204,7 @@ function ingestPayload(
     hasTriplet,
     toothCommitPending: toothCommitPendingRef.current,
     awaitingAdditionalFindings: awaitingAdditionalFindingsRef.current,
+    currentCommittedTooth,
   });
   console.info('[Perio UI] payload received', hydrated);
   pushDebugTimeline('parser', 'payload received', JSON.stringify(hydrated));
@@ -207,12 +227,17 @@ function ingestPayload(
     hydrated.bleeding === true ||
     hydrated.missing === true ||
     hydrated.implant === true ||
+    hydrated.healthy === true ||
     hydrated.recession !== undefined ||
     typeof hydrated.surface === 'string' ||
     typeof hydrated.siteIndex === 'number';
 
-  const toothNumber = typeof hydrated.tooth === 'number' ? hydrated.tooth : fallbackTooth;
-  const toothWasImplant = toothNumber !== null ? currentTeeth[toothNumber]?.implant === true : false;
+  const baseToothNumber = typeof hydrated.tooth === 'number' ? hydrated.tooth : currentCommittedTooth;
+  const shouldAdvanceTriplet = hasTriplet && previousTripletContext && !implantContextActiveRef.current;
+  const commitToothNumber = shouldAdvanceTriplet
+    ? getNextToothInChartOrder(currentCommittedTooth ?? baseToothNumber ?? 1) ?? baseToothNumber
+    : baseToothNumber;
+  const toothWasImplant = commitToothNumber !== null ? currentTeeth[commitToothNumber]?.implant === true : false;
   const surface = normalizeSurface(hydrated.surface) ?? fallbackSurface ?? 'buccal';
   const siteIndex = clampSiteIndex(hydrated.siteIndex ?? fallbackSiteIndex ?? undefined);
   const explicitAdvance = hydrated.autoAdvanceAllowed === true || hydrated.missing === true || hydrated.command === 'next' || hydrated.command === 'previous';
@@ -223,17 +248,18 @@ function ingestPayload(
     hydrated.bleeding === true ||
     hydrated.recession !== undefined ||
     hydrated.implant === true ||
+    hydrated.healthy === true ||
     typeof hydrated.surface === 'string' ||
     typeof hydrated.siteIndex === 'number';
   const commandLabel =
     hydrated.command ?? (hydrated.missing ? 'missing' : hydrated.implant ? 'implant' : hydrated.bleeding ? 'bleeding' : 'depth-triplet');
   const cursorAction = explicitAdvance ? 'advance' : 'stay';
   const resolvedCursorTooth =
-    toothNumber === null
+    commitToothNumber === null
       ? null
       : hydrated.missing
-        ? getNextToothInChartOrder(toothNumber) ?? toothNumber
-        : toothNumber;
+        ? getNextToothInChartOrder(commitToothNumber) ?? commitToothNumber
+        : commitToothNumber;
   const resolvedCursorSiteIndex = hydrated.missing ? 0 : siteIndex;
   const beforeState = {
     tooth: fallbackTooth,
@@ -252,14 +278,14 @@ function ingestPayload(
     status: connectionState,
   };
 
-  if (!hasChartSignal || toothNumber === null) {
+  if (!hasChartSignal || commitToothNumber === null) {
     console.warn('COMMIT_BLOCKED', {
       reason: 'no actionable chart signal or no target tooth',
       hasChartSignal,
-      toothNumber,
+      toothNumber: commitToothNumber,
       hydrated,
     });
-    pushDebugTimeline('parser', 'payload dropped', `tooth=${toothNumber ?? 'null'}`);
+    pushDebugTimeline('parser', 'payload dropped', `tooth=${commitToothNumber ?? 'null'}`);
 
     // Still record the raw transcript for visibility if present
     if (typeof hydrated.transcript === 'string' && hydrated.transcript.trim()) {
@@ -283,19 +309,28 @@ function ingestPayload(
     snapshotChartState(historyStackRef, currentTeeth, fallbackTooth, fallbackSurface, fallbackSiteIndex, previousPayload, parserMode, expectedInput);
   }
 
+  console.info('CURRENT_TOOTH_CONTEXT', {
+    currentCommittedTooth,
+    lastTripletTooth: previousTripletContext?.tooth ?? null,
+    currentCursor: fallbackTooth,
+    incomingTriplet: hasTriplet,
+    incomingModifier: !hasTriplet && (hydrated.bleeding === true || hydrated.recession !== undefined || hydrated.implant === true || hydrated.healthy === true || typeof hydrated.surface === 'string' || typeof hydrated.siteIndex === 'number'),
+    implantContextActive: implantContextActiveRef.current,
+  });
+
   if (workflowSignaled && !explicitAdvance) {
     toothCommitPendingRef.current = true;
     awaitingAdditionalFindingsRef.current = true;
-    logToothWorkflow('AUTO_ADVANCE_BLOCKED', `tooth=${toothNumber ?? 'null'} command=${commandLabel}`);
-    logToothWorkflow('WAITING_FOR_FINDINGS', `tooth=${toothNumber ?? 'null'} surface=${surface} siteIndex=${resolvedCursorSiteIndex}`);
+    logToothWorkflow('AUTO_ADVANCE_BLOCKED', `tooth=${commitToothNumber ?? 'null'} command=${commandLabel}`);
+    logToothWorkflow('WAITING_FOR_FINDINGS', `tooth=${commitToothNumber ?? 'null'} surface=${surface} siteIndex=${resolvedCursorSiteIndex}`);
   }
 
   if (explicitAdvance) {
     if (awaitingAdditionalFindingsRef.current) {
-      logToothWorkflow('TOOTH_FINALIZED', `tooth=${fallbackTooth ?? toothNumber ?? 'null'} command=${commandLabel}`);
+      logToothWorkflow('TOOTH_FINALIZED', `tooth=${fallbackTooth ?? commitToothNumber ?? 'null'} command=${commandLabel}`);
     }
 
-    logToothWorkflow('AUTO_ADVANCE_ALLOWED', `tooth=${toothNumber ?? 'null'} command=${commandLabel}`);
+    logToothWorkflow('AUTO_ADVANCE_ALLOWED', `tooth=${commitToothNumber ?? 'null'} command=${commandLabel}`);
     toothCommitPendingRef.current = false;
     awaitingAdditionalFindingsRef.current = false;
   }
@@ -319,7 +354,7 @@ function ingestPayload(
   );
 
   console.info('[Perio UI] commit started', {
-    toothNumber,
+    toothNumber: commitToothNumber,
     surface,
     siteIndex: resolvedCursorSiteIndex,
     hasTriplet,
@@ -327,13 +362,58 @@ function ingestPayload(
     missing: hydrated.missing === true,
     implant: hydrated.implant === true,
   });
-  pushDebugTimeline('chart', 'commit started', `tooth=${toothNumber} surface=${surface} triplet=${hasTriplet}`);
+  pushDebugTimeline('chart', 'commit started', `tooth=${commitToothNumber} surface=${surface} triplet=${hasTriplet}`);
   console.info('[Perio UI] commit target', {
-    toothNumber,
+    toothNumber: commitToothNumber,
     surface,
     siteIndex: resolvedCursorSiteIndex,
     depth: hasTriplet ? hydrated.depth : null,
   });
+
+  console.info('RENDER_TARGET', {
+    tooth: commitToothNumber,
+    surface,
+    siteIndex: resolvedCursorSiteIndex,
+    implantContextActive: implantContextActiveRef.current,
+    shouldAdvanceTriplet,
+  });
+
+  if (shouldAdvanceTriplet && previousTripletContext) {
+    console.info('PREVIOUS_TOOTH_FINALIZED', {
+      tooth: previousTripletContext.tooth,
+      surface: previousTripletContext.surface,
+      siteIndex: previousTripletContext.siteIndex,
+      depth: previousTripletContext.depth,
+    });
+    console.info('TRIPLET_TRIGGERED_ADVANCE', {
+      fromTooth: previousTripletContext.tooth,
+      toTooth: resolvedCursorTooth,
+    });
+    logToothWorkflow('TOOTH_FINALIZED', `tooth=${previousTripletContext.tooth} next=${resolvedCursorTooth}`);
+  }
+
+  if (!hasTriplet && (hydrated.bleeding === true || hydrated.recession !== undefined || hydrated.implant === true || hydrated.healthy === true || typeof hydrated.surface === 'string' || typeof hydrated.siteIndex === 'number')) {
+    console.info('MODIFIER_ATTACH_SAME_TOOTH', {
+      tooth: commitToothNumber,
+      surface,
+      siteIndex,
+      modifier: hydrated.command ?? (hydrated.bleeding ? 'bleeding' : hydrated.implant ? 'implant' : hydrated.healthy ? 'healthy' : hydrated.recession !== undefined ? 'recession' : 'surface'),
+    });
+  }
+
+  if (hydrated.implant === true) {
+    console.info('IMPLANT_CONTEXT_ACTIVE', {
+      tooth: commitToothNumber,
+      surface,
+      cursor: resolvedCursorTooth,
+    });
+    implantContextActiveRef.current = true;
+    console.info('IMPLANT_HOLD', {
+      tooth: commitToothNumber,
+      surface,
+    });
+  }
+
   console.info('[Perio UI] implant cursor state', {
     implant: hydrated.implant === true || toothWasImplant,
     cursorBefore: {
@@ -347,9 +427,21 @@ function ingestPayload(
   setCurrentSurface(surface);
   setActiveSiteIndex(resolvedCursorSiteIndex);
   updateActiveRef(resolvedCursorTooth, surface, resolvedCursorSiteIndex);
+  lastCommittedToothRef.current = resolvedCursorTooth;
+
+  if (hasTriplet && Array.isArray(hydrated.depth)) {
+    lastTripletContextRef.current = {
+      tooth: resolvedCursorTooth ?? commitToothNumber ?? currentCommittedTooth ?? 1,
+      surface,
+      siteIndex: resolvedCursorSiteIndex,
+      depth: [hydrated.depth[0] ?? 0, hydrated.depth[1] ?? 0, hydrated.depth[2] ?? 0],
+      timestamp: receivedAt,
+    };
+    implantContextActiveRef.current = false;
+  }
 
   console.info('[Perio UI] state update queued', {
-    toothNumber,
+    toothNumber: commitToothNumber,
     surface,
     siteIndex: resolvedCursorSiteIndex,
     reusedFallback: typeof hydrated.tooth !== 'number',
@@ -360,7 +452,7 @@ function ingestPayload(
   setTranscriptEntries((previous) => {
     const nextEntry = {
       id: `socket-json-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      text: JSON.stringify({ tooth: toothNumber, surface, depth: hydrated.depth ?? null, siteIndex }),
+      text: JSON.stringify({ tooth: commitToothNumber, surface, depth: hydrated.depth ?? null, siteIndex }),
       timestamp: Date.now(),
       source: 'socket' as const,
       isFinal: true,
@@ -371,14 +463,14 @@ function ingestPayload(
 
   setTeeth((previous) => {
     console.info('CHART_WRITE', {
-      toothNumber,
+      toothNumber: commitToothNumber,
       surface,
       hasTriplet,
       siteIndex,
       depth: hydrated.depth ?? null,
     });
-    const target = previous[toothNumber] ?? {
-      toothNumber,
+    const target = previous[commitToothNumber] ?? {
+      toothNumber: commitToothNumber,
       missing: false,
       implant: false,
       buccal: createSurfaceState(),
@@ -390,7 +482,7 @@ function ingestPayload(
     const nextTooth = { ...target };
 
     console.info('[Perio UI] before merge', {
-      toothNumber,
+    toothNumber: commitToothNumber,
       surface,
       missing: nextTooth.missing,
       implant: nextTooth.implant,
@@ -398,7 +490,7 @@ function ingestPayload(
       lingual: nextTooth.lingual,
     });
     console.info('[Perio UI] implant before merge', {
-      toothNumber,
+      toothNumber: commitToothNumber,
       implant: nextTooth.implant,
     });
 
@@ -412,19 +504,67 @@ function ingestPayload(
     if (hydrated.implant === true) {
       nextTooth.implant = true;
       nextTooth.missing = false;
+      console.info('IMPLANT_ATTACH', {
+        tooth: commitToothNumber,
+        surface,
+      });
+      triggerClinicalSound('acknowledgment', 'manual', 'implant attach');
     } else if (hydrated.implant === false) {
       nextTooth.implant = false;
+    }
+
+    if (hydrated.healthy === true) {
+      nextTooth[surface] = {
+        ...nextTooth[surface],
+        healthy: true,
+        bleeding: false,
+        updatedAt: receivedAt,
+      };
+      console.info('HEALTHY_COMMIT', {
+        tooth: commitToothNumber,
+        surface,
+      });
+      triggerClinicalSound('acknowledgment', 'manual', 'healthy commit');
+      console.info('HEALTHY_RENDER', {
+        tooth: commitToothNumber,
+        surface,
+      });
     }
 
     if (hydrated.bleeding === true) {
       nextTooth[surface] = {
         ...nextTooth[surface],
         bleeding: true,
+        healthy: false,
         updatedAt: receivedAt,
       };
     }
 
+    if (hydrated.recession !== undefined) {
+      nextTooth[surface] = {
+        ...nextTooth[surface],
+        recession: hydrated.recession,
+        updatedAt: receivedAt,
+      };
+      console.info('RECESSION_COMMIT', {
+        tooth: commitToothNumber,
+        surface,
+        recession: hydrated.recession,
+      });
+      triggerClinicalSound('commit', 'manual', 'recession commit');
+      console.info('RECESSION_RENDER', {
+        tooth: commitToothNumber,
+        surface,
+        recession: hydrated.recession,
+      });
+    }
+
     if (hasTriplet && Array.isArray(hydrated.depth)) {
+      console.info('TRIPLET_COMMIT', {
+        tooth: commitToothNumber,
+        surface,
+        depth: hydrated.depth,
+      });
       nextTooth[surface] = {
         ...nextTooth[surface],
         depth: [hydrated.depth[0] ?? 0, hydrated.depth[1] ?? 0, hydrated.depth[2] ?? 0],
@@ -439,53 +579,70 @@ function ingestPayload(
     }
 
     nextTooth.updatedAt = receivedAt;
-    nextTeeth[toothNumber] = nextTooth;
+    nextTeeth[commitToothNumber] = nextTooth;
 
     console.info('[Perio UI] tooth state updated', {
-      toothNumber,
+      toothNumber: commitToothNumber,
       surface,
       depth: nextTooth[surface].depth,
       bleeding: nextTooth[surface].bleeding,
       implant: nextTooth.implant,
       depthVisible: nextTooth[surface].depth.some((value) => value > 0),
     });
-    pushDebugTimeline('action', 'tooth state updated', `tooth=${toothNumber} surface=${surface}`);
-    pushDebugTimeline('chart', 'chart updated', `tooth=${toothNumber} surface=${surface} bleeding=${nextTooth[surface].bleeding}`);
+    pushDebugTimeline('action', 'tooth state updated', `tooth=${commitToothNumber} surface=${surface}`);
+    pushDebugTimeline('chart', 'chart updated', `tooth=${commitToothNumber} surface=${surface} bleeding=${nextTooth[surface].bleeding}`);
     console.info('[Perio UI] chart state updated', {
-      toothNumber,
+      toothNumber: commitToothNumber,
       surface,
       siteIndex,
       depth: nextTooth[surface].depth,
       depthVisible: nextTooth[surface].depth.some((value) => value > 0),
     });
 
+    console.info('FINDING_RENDER_CHECK', {
+      tooth: commitToothNumber,
+      surface,
+      bleeding: nextTooth[surface].bleeding,
+      healthy: nextTooth[surface].healthy,
+      recession: nextTooth[surface].recession,
+      implant: nextTooth.implant,
+    });
+
+    if (typeof nextTooth[surface].recession !== 'undefined' && nextTooth[surface].recession !== false) {
+      console.info('RECESSION_RENDER', {
+        tooth: commitToothNumber,
+        surface,
+        recession: nextTooth[surface].recession,
+      });
+    }
+
     if (hasTriplet && Array.isArray(hydrated.depth)) {
       console.info('[Perio UI] after merge', {
-        toothNumber,
+        toothNumber: commitToothNumber,
         surface,
         implantPersisted: nextTooth.implant === true,
         bleedingPersisted: nextTooth[surface].bleeding === true,
         mergedSurface: nextTooth[surface],
       });
       console.info('[Perio UI] implant after merge', {
-        toothNumber,
+        toothNumber: commitToothNumber,
         implant: nextTooth.implant,
       });
-      pushDebugTimeline('chart', 'surface merged', `tooth=${toothNumber} surface=${surface}`);
-      pushDebugTimeline('chart', `implant persisted=${nextTooth.implant === true}`, `tooth=${toothNumber}`);
+      pushDebugTimeline('chart', 'surface merged', `tooth=${commitToothNumber} surface=${surface}`);
+      pushDebugTimeline('chart', `implant persisted=${nextTooth.implant === true}`, `tooth=${commitToothNumber}`);
       pushDebugTimeline('chart', `bleeding persisted=${nextTooth[surface].bleeding === true}`, `surface=${surface}`);
       console.info('[Perio UI] triplet committed', {
-        tooth: toothNumber,
+        tooth: commitToothNumber,
         surface,
         depth: nextTooth[surface].depth,
       });
       console.info('TOOTH_STATE_AFTER', {
-        toothNumber,
+        toothNumber: commitToothNumber,
         surface,
         state: nextTooth[surface],
       });
       console.info('COMMIT_SUCCESS', {
-        toothNumber,
+        toothNumber: commitToothNumber,
         surface,
         siteIndex,
         depth: nextTooth[surface].depth,
@@ -493,18 +650,18 @@ function ingestPayload(
       console.info('[Perio UI] commit complete', {
         implant: nextTooth.implant,
         cursorBefore: {
-          tooth: toothNumber,
+          tooth: commitToothNumber,
           surface,
           siteIndex,
         },
         cursorAfter: {
-          tooth: getNextToothInChartOrder(toothNumber) ?? toothNumber,
+          tooth: getNextToothInChartOrder(commitToothNumber) ?? commitToothNumber,
           surface,
           siteIndex: 0,
         },
         advanceTriggered: true,
       });
-      void playSound('commit', 'triplet_commit');
+      triggerClinicalSound('commit', 'triplet_commit', 'triplet commit');
     }
 
     if (!hasTriplet && (hydrated.missing === true || hydrated.implant === true)) {
@@ -576,6 +733,9 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
   const lastActiveToothRef = useRef<number | null>(1);
   const lastActiveSurfaceRef = useRef<ToothSurface | null>('buccal');
   const lastActiveSiteIndexRef = useRef<number | null>(0);
+  const lastCommittedToothRef = useRef<number | null>(1);
+  const lastTripletContextRef = useRef<TripletContext | null>(null);
+  const implantContextActiveRef = useRef(false);
   const toothCommitPendingRef = useRef(false);
   const awaitingAdditionalFindingsRef = useRef(false);
   const historyStackRef = useRef<ChartSnapshot[]>([]);
@@ -619,6 +779,16 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
     setExpectedInput(expectation);
   }, []);
 
+  const triggerClinicalSound = useCallback(
+    (sound: FindingSound, trigger: ClinicalSoundTrigger, reason: string) => {
+      console.info('SOUND_TRIGGER', { sound, trigger, reason });
+      void playSound(sound, trigger).then((success) => {
+        console.info('SOUND_PLAY_SUCCESS', { sound, trigger, success, reason });
+      });
+    },
+    [playSound]
+  );
+
   const logToothWorkflow = useCallback(
     (event: 'AUTO_ADVANCE_BLOCKED' | 'WAITING_FOR_FINDINGS' | 'TOOTH_FINALIZED' | 'AUTO_ADVANCE_ALLOWED', detail: string) => {
       console.info(`[Perio UI] ${event}`, detail);
@@ -640,6 +810,8 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
       setCurrentSurface(surface ?? null);
       setActiveSiteIndex(surface ? 0 : null);
       updateActiveRef(tooth, surface ?? null, surface ? 0 : null);
+      lastCommittedToothRef.current = tooth;
+      implantContextActiveRef.current = false;
       updateParserContext('navigation', surface ? 'depth-triplet' : 'surface');
       toothCommitPendingRef.current = true;
       awaitingAdditionalFindingsRef.current = true;
@@ -662,6 +834,8 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
       setCurrentSurface(surface);
       setActiveSiteIndex(0);
       updateActiveRef(currentTooth, surface, 0);
+      lastCommittedToothRef.current = currentTooth;
+      implantContextActiveRef.current = false;
       updateParserContext('probing', 'depth-triplet');
       toothCommitPendingRef.current = true;
       awaitingAdditionalFindingsRef.current = true;
@@ -695,6 +869,8 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
       setCurrentTooth(nextTooth);
       setActiveSiteIndex(currentSurface ? 0 : null);
       updateActiveRef(nextTooth, currentSurface, currentSurface ? 0 : null);
+      lastCommittedToothRef.current = nextTooth;
+      implantContextActiveRef.current = false;
       updateParserContext('navigation', currentSurface ? 'depth-triplet' : 'surface');
       toothCommitPendingRef.current = true;
       awaitingAdditionalFindingsRef.current = true;
@@ -730,6 +906,8 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
     setCurrentSurface(snapshot.currentSurface);
     setActiveSiteIndex(snapshot.activeSiteIndex);
     updateActiveRef(snapshot.currentTooth, snapshot.currentSurface, snapshot.activeSiteIndex);
+    lastCommittedToothRef.current = snapshot.currentTooth;
+    implantContextActiveRef.current = false;
     updateParserContext(snapshot.parserMode, snapshot.expectedInput);
     setLastPayload(snapshot.lastPayload);
     flashFeedback({ kind: 'undo', message: 'UNDO APPLIED' });
@@ -983,12 +1161,16 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
       resolvedActiveSiteIndex,
       updateActiveRef,
       updateParserContext,
+      lastCommittedToothRef,
+      lastTripletContextRef,
+      implantContextActiveRef,
       toothCommitPendingRef,
       awaitingAdditionalFindingsRef,
       logToothWorkflow,
       historyStackRef,
       flashFeedback,
       playSound,
+      triggerClinicalSound,
       pushDebugTimeline
     );
   }, [
@@ -1005,6 +1187,7 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
     applyUndo,
     flashFeedback,
     playSound,
+    triggerClinicalSound,
     pushDebugTimeline,
     navigateTooth,
     selectTooth,

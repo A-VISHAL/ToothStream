@@ -92,6 +92,8 @@ function SiteOverlay({
   activeSiteIndex,
   depth,
   bleeding,
+  healthy,
+  recession,
 }: {
   toothNumber: number;
   isActiveTooth: boolean;
@@ -100,6 +102,8 @@ function SiteOverlay({
   activeSiteIndex: number | null;
   depth: [number, number, number];
   bleeding: boolean;
+  healthy: boolean;
+  recession?: number | boolean;
 }) {
   const isActiveSurface = isActiveTooth && surface === activeSurface;
   const depthVisible = depth.some((value) => value > 0);
@@ -119,6 +123,17 @@ function SiteOverlay({
       depthVisible,
     });
   }, [activeSiteIndex, activeSurface, depth, depthVisible, surface, toothNumber]);
+
+  useEffect(() => {
+    console.info('FINDING_RENDER_CHECK', {
+      tooth: toothNumber,
+      surface,
+      bleeding,
+      healthy,
+      recession,
+      depthVisible,
+    });
+  }, [bleeding, depthVisible, healthy, recession, surface, toothNumber]);
 
   return (
     <g>
@@ -198,6 +213,20 @@ function SiteOverlay({
                   strokeWidth="0.9"
                   className={isActiveSite ? 'pulse-bleed' : undefined}
                 />
+              ) : null}
+              {healthy ? (
+                <g>
+                  <circle cx="-9" cy="-9" r="2.8" fill="#22c55e" stroke="#ffffff" strokeWidth="0.9" />
+                  <path d="M-10 -9L-8.6 -7.6L-6.2 -10.1" fill="none" stroke="#ffffff" strokeWidth="1.1" strokeLinecap="round" strokeLinejoin="round" />
+                </g>
+              ) : null}
+              {typeof recession !== 'undefined' && recession !== false ? (
+                <g transform="translate(0, 18)">
+                  <rect x="-14" y="-7" width="28" height="14" rx="7" fill="#fff7ed" stroke="#f59e0b" strokeWidth="0.9" />
+                  <text x="0" y="0" textAnchor="middle" dominantBaseline="middle" fontSize="9" fontWeight="800" fill="#b45309">
+                    R{typeof recession === 'number' ? recession : ''}
+                  </text>
+                </g>
               ) : null}
             </g>
           </g>
@@ -342,6 +371,8 @@ export function ToothFactory({ tooth, toothNumber, arch, positionIndex, activeTo
         activeSiteIndex={activeSiteIndex}
         depth={tooth.lingual.depth}
         bleeding={tooth.lingual.bleeding}
+        healthy={tooth.lingual.healthy}
+        recession={tooth.lingual.recession}
       />
 
       <SiteOverlay
@@ -352,6 +383,8 @@ export function ToothFactory({ tooth, toothNumber, arch, positionIndex, activeTo
         activeSiteIndex={activeSiteIndex}
         depth={tooth.buccal.depth}
         bleeding={tooth.buccal.bleeding}
+        healthy={tooth.buccal.healthy}
+        recession={tooth.buccal.recession}
       />
     </g>
   );

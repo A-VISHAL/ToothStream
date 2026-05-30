@@ -494,7 +494,7 @@ function detectCommand(tokens: string[]): PerioPayload['command'] | undefined {
 
   const token = tokens[0];
 
-  if (token === 'bleeding' || token === 'missing' || token === 'implant' || token === 'undo' || token === 'next' || token === 'previous' || token === 'skip' || token === 'resume') {
+  if (token === 'bleeding' || token === 'missing' || token === 'implant' || token === 'healthy' || token === 'undo' || token === 'next' || token === 'previous' || token === 'skip' || token === 'resume') {
     return token;
   }
 
@@ -544,6 +544,7 @@ export function parseTranscriptToPayload(transcript: string, context?: Transcrip
   const bleeding = command === 'bleeding' || /\bbleed(?:ing)?\b/i.test(normalizedTranscript);
   const missing = command === 'missing' || /\bmissing\b/i.test(normalizedTranscript);
   const implant = command === 'implant' || /\bimplant\b/i.test(normalizedTranscript);
+  const healthy = command === 'healthy' || /\bhealthy\b/i.test(normalizedTranscript);
   const explicitAdvance = command === 'next' || command === 'previous' || command === 'skip' || command === 'resume' || missing;
   const toothCommitPending =
     typeof tooth === 'number' ||
@@ -551,6 +552,7 @@ export function parseTranscriptToPayload(transcript: string, context?: Transcrip
     bleeding ||
     missing ||
     implant ||
+    healthy ||
     surface !== undefined ||
     siteIndex !== undefined;
   const awaitingAdditionalFindings = toothCommitPending && !explicitAdvance;
@@ -585,7 +587,8 @@ export function parseTranscriptToPayload(transcript: string, context?: Transcrip
     siteIndex === undefined &&
     !bleeding &&
     !missing &&
-    !implant
+    !implant &&
+    !healthy
   ) {
     return null;
   }
@@ -599,6 +602,7 @@ export function parseTranscriptToPayload(transcript: string, context?: Transcrip
     bleeding,
     missing,
     implant,
+    healthy,
     recession,
     siteIndex,
     advanceCursor: explicitAdvance,

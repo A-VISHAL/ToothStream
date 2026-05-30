@@ -18,12 +18,13 @@ export type ConnectionState = 'connecting' | 'connected' | 'listening' | 'reconn
 export interface PerioPayload {
   tooth?: number;
   explicitTooth?: boolean;
-  command?: 'bleeding' | 'missing' | 'implant' | 'undo' | 'next' | 'previous' | 'skip' | 'resume';
+  command?: 'bleeding' | 'missing' | 'implant' | 'healthy' | 'undo' | 'next' | 'previous' | 'skip' | 'resume';
   surface?: string;
   depth?: number[];
   bleeding?: boolean;
   missing?: boolean;
   implant?: boolean;
+  healthy?: boolean;
   recession?: number | boolean;
   siteIndex?: number;
   advanceCursor?: boolean;
@@ -49,6 +50,8 @@ export interface CommandFeedback {
 export interface ToothSurfaceState {
   depth: [number, number, number];
   bleeding: boolean;
+  healthy: boolean;
+  recession?: number | boolean;
   siteIndex: number;
   updatedAt: number;
 }
