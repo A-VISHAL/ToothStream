@@ -11,6 +11,16 @@ export interface TranscriptParseContext {
   currentSurface?: ToothSurface | null;
 }
 
+export type ClinicalIntent = 'none' | 'tooth' | 'triplet' | 'command' | 'surface' | 'keyword';
+
+export interface ClinicalSpeechFilterResult {
+  normalizedTranscript: string;
+  clinicalScore: number;
+  intent: ClinicalIntent;
+  shouldProcess: boolean;
+  reason: string;
+}
+
 const NUMBER_WORDS: Record<string, number> = {
   zero: 0,
   one: 1,
@@ -53,6 +63,21 @@ const HOMOPHONE_NORMALIZATIONS: Record<string, string> = {
   tree: 'three',
   twos: 'tooth',
 };
+
+const CLINICAL_KEYWORDS = new Set([
+  'tooth',
+  'bleeding',
+  'missing',
+  'implant',
+  'undo',
+  'next',
+  'previous',
+  'buccal',
+  'lingual',
+  'palatal',
+  'mesial',
+  'distal',
+]);
 
 function normalizeWord(word: string): string {
   return HOMOPHONE_NORMALIZATIONS[word.toLowerCase()] ?? word.toLowerCase();
@@ -130,6 +155,97 @@ function describeToothNumber(tooth: number | null, explicitTooth: boolean): stri
   }
 
   return `tooth=${tooth}${explicitTooth ? ' explicit' : ''}`;
+}
+
+function detectClinicalSpeechIntent(transcript: string, context?: TranscriptParseContext): ClinicalSpeechFilterResult {
+  const cleaned = transcript.trim();
+  const normalizedTranscript = normalizeClinicalTranscript(cleaned);
+  const tokens = tokenize(normalizedTranscript);
+  const command = detectCommand(tokens);
+  const explicitTooth = tokens.includes('tooth');
+  const tooth = extractTooth(tokens, context);
+  const surface = extractSurface(normalizedTranscript);
+  const depthTriplet = shouldParseDepthTriplet(context, tokens) ? parseDepthTriplet(tokens) : undefined;
+  const hasTriplet = Array.isArray(depthTriplet) && depthTriplet.length === 3;
+  const keywordHit = tokens.some((token) => CLINICAL_KEYWORDS.has(token));
+
+  if (!cleaned) {
+    return {
+      normalizedTranscript,
+      clinicalScore: 0,
+      intent: 'none',
+      shouldProcess: false,
+      reason: 'empty transcript',
+    };
+  }
+
+  if (explicitTooth && typeof tooth === 'number') {
+    return {
+      normalizedTranscript,
+      clinicalScore: 3,
+      intent: 'tooth',
+      shouldProcess: true,
+      reason: 'explicit tooth command',
+    };
+  }
+
+  if (command !== undefined) {
+    return {
+      normalizedTranscript,
+      clinicalScore: 3,
+      intent: command === 'next' || command === 'previous' ? 'command' : 'command',
+      shouldProcess: true,
+      reason: 'clinical command',
+    };
+  }
+
+  if (typeof tooth === 'number' && explicitTooth) {
+    return {
+      normalizedTranscript,
+      clinicalScore: 3,
+      intent: 'tooth',
+      shouldProcess: true,
+      reason: describeToothNumber(tooth, explicitTooth),
+    };
+  }
+
+  if (hasTriplet) {
+    return {
+      normalizedTranscript,
+      clinicalScore: 3,
+      intent: 'triplet',
+      shouldProcess: true,
+      reason: 'depth triplet detected in clinical context',
+    };
+  }
+
+  if (surface !== undefined) {
+    return {
+      normalizedTranscript,
+      clinicalScore: 2,
+      intent: 'surface',
+      shouldProcess: true,
+      reason: 'surface command',
+    };
+  }
+
+  if (keywordHit) {
+    return {
+      normalizedTranscript,
+      clinicalScore: 1,
+      intent: 'keyword',
+      shouldProcess: true,
+      reason: 'clinical keyword',
+    };
+  }
+
+  return {
+    normalizedTranscript,
+    clinicalScore: 0,
+    intent: 'none',
+    shouldProcess: false,
+    reason: 'no clinical intent detected',
+  };
 }
 
 function parseDepthTriplet(tokens: string[]): number[] | undefined {
@@ -244,8 +360,14 @@ function shouldParseDepthTriplet(context: TranscriptParseContext | undefined, to
 }
 
 export function parseTranscriptToPayload(transcript: string, context?: TranscriptParseContext): PerioPayload | null {
+  const filter = detectClinicalSpeechIntent(transcript, context);
+
+  if (!filter.shouldProcess) {
+    return null;
+  }
+
   const cleaned = transcript.trim();
-  const normalizedTranscript = normalizeClinicalTranscript(cleaned);
+  const normalizedTranscript = filter.normalizedTranscript;
   const tokens = tokenize(normalizedTranscript);
 
   if (!cleaned) {
@@ -261,15 +383,6 @@ export function parseTranscriptToPayload(transcript: string, context?: Transcrip
   const bleeding = command === 'bleeding' || /\bbleed(?:ing)?\b/i.test(normalizedTranscript);
   const missing = command === 'missing' || /\bmissing\b/i.test(normalizedTranscript);
   const implant = command === 'implant' || /\bimplant\b/i.test(normalizedTranscript);
-
-  console.info('[Perio Parser] RAW transcript', cleaned);
-  console.info('[Perio Parser] NORMALIZED transcript', normalizedTranscript);
-  console.info('[Perio Parser] tooth parser result', {
-    explicitTooth,
-    tooth,
-    decision: describeToothNumber(tooth ?? null, explicitTooth),
-  });
-  console.info('[Perio Parser] ACTION', tooth !== undefined ? `tooth=${tooth}` : depth ? `depth=${depth.join(',')}` : 'none');
 
   if (
     command === undefined &&
@@ -299,4 +412,8 @@ export function parseTranscriptToPayload(transcript: string, context?: Transcrip
     timestamp: Date.now(),
     type: 'deepgram-transcript',
   };
+}
+
+export function evaluateClinicalSpeechIntent(transcript: string, context?: TranscriptParseContext): ClinicalSpeechFilterResult {
+  return detectClinicalSpeechIntent(transcript, context);
 }

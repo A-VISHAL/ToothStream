@@ -1,5 +1,5 @@
 import React, { createContext, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { parseTranscriptToPayload } from './transcriptParser';
+import { evaluateClinicalSpeechIntent, parseTranscriptToPayload } from './transcriptParser';
 import { useDeepgramTranscription } from './useDeepgramTranscription';
 import type {
   CommandFeedback,
@@ -455,6 +455,10 @@ function ingestPayload(
         siteIndex,
         updatedAt: receivedAt,
       };
+
+      if (toothWasImplant || nextTooth.implant === true) {
+        nextTooth.implant = true;
+      }
     }
 
     nextTooth.updatedAt = receivedAt;
@@ -759,6 +763,42 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
         },
         ...previous,
       ].slice(0, 12));
+      return;
+    }
+
+    const speechFilter = evaluateClinicalSpeechIntent(latestFinal.text, {
+      mode: parserMode,
+      expectedInput,
+      currentTooth,
+      currentSurface,
+    });
+
+    console.info('[Perio UI] clinical speech filter', {
+      RAW: latestFinal.text.trim(),
+      clinical_score: speechFilter.clinicalScore,
+      intent_detected: speechFilter.intent,
+      action: speechFilter.shouldProcess ? 'processed' : 'ignored_non_clinical',
+      reason: speechFilter.reason,
+    });
+    pushDebugTimeline(
+      'parser',
+      speechFilter.shouldProcess ? 'clinical intent detected' : 'ignored_non_clinical',
+      `score=${speechFilter.clinicalScore} intent=${speechFilter.intent} reason=${speechFilter.reason}`
+    );
+
+    if (!speechFilter.shouldProcess) {
+      setTranscriptEntries((previous) => {
+        const nextEntry = {
+          id: `socket-noise-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          text: latestFinal.text.trim(),
+          timestamp: Date.now(),
+          source: 'deepgram' as const,
+          isFinal: true,
+        };
+
+        return [nextEntry, ...previous].slice(0, 12);
+      });
+
       return;
     }
 
