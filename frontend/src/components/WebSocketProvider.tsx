@@ -294,6 +294,14 @@ function ingestPayload(
     siteIndex: resolvedCursorSiteIndex,
     depth: hasTriplet ? hydrated.depth : null,
   });
+  console.info('[Perio UI] implant cursor state', {
+    implant: hydrated.implant === true || toothWasImplant,
+    cursorBefore: {
+      tooth: resolvedCursorTooth,
+      surface,
+      siteIndex: resolvedCursorSiteIndex,
+    },
+  });
 
   setCurrentTooth(resolvedCursorTooth);
   setCurrentSurface(surface);
@@ -391,6 +399,7 @@ function ingestPayload(
       surface,
       depth: nextTooth[surface].depth,
       bleeding: nextTooth[surface].bleeding,
+      implant: nextTooth.implant,
       depthVisible: nextTooth[surface].depth.some((value) => value > 0),
     });
     pushDebugTimeline('action', 'tooth state updated', `tooth=${toothNumber} surface=${surface}`);
@@ -423,6 +432,20 @@ function ingestPayload(
         surface,
         depth: nextTooth[surface].depth,
       });
+      console.info('[Perio UI] commit complete', {
+        implant: nextTooth.implant,
+        cursorBefore: {
+          tooth: toothNumber,
+          surface,
+          siteIndex,
+        },
+        cursorAfter: {
+          tooth: getNextToothInChartOrder(toothNumber) ?? toothNumber,
+          surface,
+          siteIndex: 0,
+        },
+        advanceTriggered: true,
+      });
       void playSound('commit', 'triplet_commit');
     }
 
@@ -434,7 +457,7 @@ function ingestPayload(
   });
 
   if (hasTriplet) {
-    const nextTooth = toothWasImplant ? toothNumber : getNextToothInChartOrder(toothNumber) ?? toothNumber;
+    const nextTooth = getNextToothInChartOrder(toothNumber) ?? toothNumber;
 
     setCurrentTooth(nextTooth);
     setCurrentSurface(surface);
@@ -444,6 +467,7 @@ function ingestPayload(
       fromTooth: toothNumber,
       toTooth: nextTooth,
       surface,
+      implant: nextTooth === toothNumber ? nextTooth === toothNumber : false,
     });
     pushDebugTimeline('state', 'cursor advanced', `from=${toothNumber} to=${nextTooth} surface=${surface}`);
   }

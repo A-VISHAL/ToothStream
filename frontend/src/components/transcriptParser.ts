@@ -144,21 +144,36 @@ function tokenizeRaw(transcript: string): string[] {
     .map((token) => token.toLowerCase());
 }
 
-function parseProtectedDepthTriplet(transcript: string): number[] | undefined {
+function parseProtectedDepthTriplet(transcript: string, context?: TranscriptParseContext): number[] | undefined {
+  const tripletMode = context?.mode === 'probing' || context?.expectedInput === 'depth-triplet';
+
+  if (!tripletMode) {
+    return undefined;
+  }
+
   const rawTokens = tokenizeRaw(transcript);
 
   if (rawTokens.length !== 3) {
     return undefined;
   }
 
+  if (rawTokens[1] === 'to') {
+    const first = parseNumberToken(rawTokens[0] ?? '');
+    const third = parseNumberToken(rawTokens[2] ?? '');
+
+    if (first !== null && third !== null) {
+      return [first, 2, third];
+    }
+  }
+
   return parseDepthTriplet(rawTokens);
 }
 
-function normalizeClinicalTranscript(transcript: string, protectedTriplet: boolean): string {
+function normalizeClinicalTranscript(transcript: string, allowToothNormalization: boolean): string {
   const navigationNormalized = normalizeNavigationAlias(transcript).normalized;
   const surfaceNormalized = normalizeSurfaceAlias(navigationNormalized).normalized;
 
-  if (protectedTriplet) {
+  if (!allowToothNormalization) {
     return surfaceNormalized.replace(/\s+/g, ' ');
   }
 
@@ -229,8 +244,9 @@ function detectClinicalSpeechIntent(transcript: string, context?: TranscriptPars
   const cleaned = transcript.trim();
   const navigationAlias = normalizeNavigationAlias(cleaned);
   const surfaceAlias = normalizeSurfaceAlias(cleaned);
-  const protectedTriplet = parseProtectedDepthTriplet(cleaned);
-  const normalizedTranscript = normalizeClinicalTranscript(cleaned, protectedTriplet !== undefined);
+  const explicitNavigationIntent = navigationAlias.navigationMatch || /\btooth\b/i.test(cleaned);
+  const protectedTriplet = parseProtectedDepthTriplet(cleaned, context);
+  const normalizedTranscript = normalizeClinicalTranscript(cleaned, explicitNavigationIntent && !protectedTriplet);
   const tokens = tokenize(normalizedTranscript);
   const command = detectCommand(tokens);
   const explicitTooth = tokens.includes('tooth');
@@ -252,7 +268,7 @@ function detectClinicalSpeechIntent(transcript: string, context?: TranscriptPars
     };
   }
 
-  if (explicitTooth && typeof tooth === 'number') {
+  if (explicitNavigationIntent && typeof tooth === 'number' && !hasTriplet) {
     return {
       normalizedTranscript,
       navigationMatch: navigationAlias.navigationMatch,
@@ -260,7 +276,7 @@ function detectClinicalSpeechIntent(transcript: string, context?: TranscriptPars
       clinicalScore: 3,
       intent: 'tooth',
       shouldProcess: true,
-      reason: 'explicit tooth command',
+      reason: 'explicit navigation command',
     };
   }
 
@@ -468,17 +484,20 @@ export function parseTranscriptToPayload(transcript: string, context?: Transcrip
   const cleaned = transcript.trim();
   const normalizedTranscript = filter.normalizedTranscript;
   const tokens = tokenize(normalizedTranscript);
+  const tripletMode = context?.mode === 'probing' || context?.expectedInput === 'depth-triplet';
+  const navigationIntent = /\btooth\b/i.test(cleaned) || /^(jump|go|select|move)\s+to\b/i.test(cleaned);
 
-  console.info('[Perio Parser] RAW transcript', cleaned);
-  console.info('[Perio Parser] NORMALIZED transcript', normalizedTranscript);
-  console.info('[Perio Parser] NAVIGATION_MATCH', filter.navigationMatch);
+  console.info('[Perio Parser] RAW', cleaned);
+  console.info('[Perio Parser] NORMALIZED', normalizedTranscript);
+  console.info('[Perio Parser] triplet_mode', tripletMode);
+  console.info('[Perio Parser] navigation_intent', navigationIntent);
   console.info('[Perio Parser] SURFACE_MATCH', filter.surfaceMatch);
 
   if (!cleaned) {
     return null;
   }
 
-  const protectedTriplet = parseProtectedDepthTriplet(cleaned);
+  const protectedTriplet = parseProtectedDepthTriplet(cleaned, context);
   const command = detectCommand(tokens);
   const explicitTooth = tokens.includes('tooth');
   const tooth = extractTooth(tokens, context);
@@ -490,7 +509,9 @@ export function parseTranscriptToPayload(transcript: string, context?: Transcrip
   const implant = command === 'implant' || /\bimplant\b/i.test(normalizedTranscript);
   const routingDecision = protectedTriplet
     ? 'depth_triplet'
-    : surface !== undefined
+    : navigationIntent && typeof tooth === 'number'
+      ? 'tooth_navigation'
+      : surface !== undefined
       ? 'surface_command'
       : command !== undefined
         ? 'clinical_command'
