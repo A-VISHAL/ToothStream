@@ -16,6 +16,7 @@ export type ClinicalIntent = 'none' | 'tooth' | 'triplet' | 'command' | 'surface
 export interface ClinicalSpeechFilterResult {
   normalizedTranscript: string;
   navigationMatch: boolean;
+  surfaceMatch: boolean;
   clinicalScore: number;
   intent: ClinicalIntent;
   shouldProcess: boolean;
@@ -81,7 +82,6 @@ const CLINICAL_KEYWORDS = new Set([
 ]);
 
 const NAVIGATION_ALIAS_REGEX = /^(jump|go|select|move)\s+to\s+(.+)$/i;
-
 function normalizeWord(word: string): string {
   return HOMOPHONE_NORMALIZATIONS[word.toLowerCase()] ?? word.toLowerCase();
 }
@@ -105,6 +105,29 @@ function normalizeNavigationAlias(transcript: string): { normalized: string; nav
   };
 }
 
+function normalizeSurfaceAlias(transcript: string): { normalized: string; surfaceMatch: boolean } {
+  const cleaned = transcript.trim().toLowerCase();
+
+  if (/^(turn\s+toward(?:s)?\s+me|toward(?:s)?\s+me)$/.test(cleaned)) {
+    return {
+      normalized: 'buccal',
+      surfaceMatch: true,
+    };
+  }
+
+  if (/^(turn\s+away|away\s+from\s+me)$/.test(cleaned)) {
+    return {
+      normalized: 'lingual',
+      surfaceMatch: true,
+    };
+  }
+
+  return {
+    normalized: cleaned,
+    surfaceMatch: false,
+  };
+}
+
 function tokenize(transcript: string): string[] {
   return transcript
     .trim()
@@ -114,9 +137,10 @@ function tokenize(transcript: string): string[] {
 }
 
 function normalizeClinicalTranscript(transcript: string): string {
-  const aliasNormalized = normalizeNavigationAlias(transcript).normalized;
+  const navigationNormalized = normalizeNavigationAlias(transcript).normalized;
+  const surfaceNormalized = normalizeSurfaceAlias(navigationNormalized).normalized;
 
-  return aliasNormalized
+  return surfaceNormalized
     .replace(/\btwo\s+to\b/g, 'tooth')
     .replace(/\btooth\s+number\b/g, 'tooth')
     .replace(/\btoothh\b/g, 'tooth')
@@ -182,6 +206,7 @@ function describeToothNumber(tooth: number | null, explicitTooth: boolean): stri
 function detectClinicalSpeechIntent(transcript: string, context?: TranscriptParseContext): ClinicalSpeechFilterResult {
   const cleaned = transcript.trim();
   const navigationAlias = normalizeNavigationAlias(cleaned);
+  const surfaceAlias = normalizeSurfaceAlias(cleaned);
   const normalizedTranscript = normalizeClinicalTranscript(cleaned);
   const tokens = tokenize(normalizedTranscript);
   const command = detectCommand(tokens);
@@ -196,6 +221,7 @@ function detectClinicalSpeechIntent(transcript: string, context?: TranscriptPars
     return {
       normalizedTranscript,
       navigationMatch: navigationAlias.navigationMatch,
+      surfaceMatch: surfaceAlias.surfaceMatch || surface !== undefined,
       clinicalScore: 0,
       intent: 'none',
       shouldProcess: false,
@@ -207,6 +233,7 @@ function detectClinicalSpeechIntent(transcript: string, context?: TranscriptPars
     return {
       normalizedTranscript,
       navigationMatch: navigationAlias.navigationMatch,
+      surfaceMatch: surfaceAlias.surfaceMatch || surface !== undefined,
       clinicalScore: 3,
       intent: 'tooth',
       shouldProcess: true,
@@ -218,6 +245,7 @@ function detectClinicalSpeechIntent(transcript: string, context?: TranscriptPars
     return {
       normalizedTranscript,
       navigationMatch: navigationAlias.navigationMatch,
+      surfaceMatch: surfaceAlias.surfaceMatch || surface !== undefined,
       clinicalScore: 3,
       intent: command === 'next' || command === 'previous' ? 'command' : 'command',
       shouldProcess: true,
@@ -229,6 +257,7 @@ function detectClinicalSpeechIntent(transcript: string, context?: TranscriptPars
     return {
       normalizedTranscript,
       navigationMatch: navigationAlias.navigationMatch,
+      surfaceMatch: surfaceAlias.surfaceMatch || surface !== undefined,
       clinicalScore: 3,
       intent: 'tooth',
       shouldProcess: true,
@@ -236,10 +265,23 @@ function detectClinicalSpeechIntent(transcript: string, context?: TranscriptPars
     };
   }
 
+  if (surface !== undefined) {
+    return {
+      normalizedTranscript,
+      navigationMatch: navigationAlias.navigationMatch,
+      surfaceMatch: surfaceAlias.surfaceMatch || surface !== undefined,
+      clinicalScore: 2,
+      intent: 'surface',
+      shouldProcess: true,
+      reason: 'surface command',
+    };
+  }
+
   if (hasTriplet) {
     return {
       normalizedTranscript,
       navigationMatch: navigationAlias.navigationMatch,
+      surfaceMatch: surfaceAlias.surfaceMatch || surface !== undefined,
       clinicalScore: 3,
       intent: 'triplet',
       shouldProcess: true,
@@ -251,6 +293,7 @@ function detectClinicalSpeechIntent(transcript: string, context?: TranscriptPars
     return {
       normalizedTranscript,
       navigationMatch: navigationAlias.navigationMatch,
+      surfaceMatch: surfaceAlias.surfaceMatch || surface !== undefined,
       clinicalScore: 2,
       intent: 'surface',
       shouldProcess: true,
@@ -262,6 +305,7 @@ function detectClinicalSpeechIntent(transcript: string, context?: TranscriptPars
     return {
       normalizedTranscript,
       navigationMatch: navigationAlias.navigationMatch,
+      surfaceMatch: surfaceAlias.surfaceMatch || surface !== undefined,
       clinicalScore: 1,
       intent: 'keyword',
       shouldProcess: true,
@@ -272,6 +316,7 @@ function detectClinicalSpeechIntent(transcript: string, context?: TranscriptPars
   return {
     normalizedTranscript,
     navigationMatch: navigationAlias.navigationMatch,
+    surfaceMatch: surfaceAlias.surfaceMatch || surface !== undefined,
     clinicalScore: 0,
     intent: 'none',
     shouldProcess: false,
@@ -404,6 +449,7 @@ export function parseTranscriptToPayload(transcript: string, context?: Transcrip
   console.info('[Perio Parser] RAW transcript', cleaned);
   console.info('[Perio Parser] NORMALIZED transcript', normalizedTranscript);
   console.info('[Perio Parser] NAVIGATION_MATCH', filter.navigationMatch);
+  console.info('[Perio Parser] SURFACE_MATCH', filter.surfaceMatch);
 
   if (!cleaned) {
     return null;

@@ -9,6 +9,7 @@ interface StatusBarProps {
   transcriptionError: string | null;
   soundEnabled: boolean;
   setSoundEnabled: React.Dispatch<React.SetStateAction<boolean>>;
+  unlockAudio: () => Promise<boolean>;
 }
 
 function statusTone(state: ConnectionState): string {
@@ -52,6 +53,7 @@ export function StatusBar({
   transcriptionError,
   soundEnabled,
   setSoundEnabled,
+  unlockAudio,
 }: StatusBarProps) {
   const debugPayload = lastPayload ? JSON.stringify(lastPayload, null, 2) : 'No JSON payload received yet.';
 
@@ -98,7 +100,10 @@ export function StatusBar({
               </div>
               <button
                 type="button"
-                onClick={() => setSoundEnabled((previous) => !previous)}
+                onClick={() => {
+                  void unlockAudio();
+                  setSoundEnabled((previous) => !previous);
+                }}
                 className={`rounded-full border px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.22em] transition-all duration-200 ${
                   soundEnabled
                     ? 'border-cyan-200 bg-cyan-50 text-cyan-800 hover:bg-cyan-100'

@@ -16,6 +16,7 @@ function Dashboard() {
     commandFeedback,
     soundEnabled,
     setSoundEnabled,
+    unlockAudio,
     currentTooth,
     currentSurface,
     activeSiteIndex,
@@ -93,6 +94,7 @@ function Dashboard() {
                 transcriptionError={transcriptionError}
                 soundEnabled={soundEnabled}
                 setSoundEnabled={setSoundEnabled}
+                unlockAudio={unlockAudio}
               />
             </div>
           </aside>

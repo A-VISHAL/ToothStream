@@ -112,6 +112,7 @@ export interface PerioChartContextValue {
   commandFeedback: CommandFeedback | null;
   soundEnabled: boolean;
   setSoundEnabled: React.Dispatch<React.SetStateAction<boolean>>;
+  unlockAudio: () => Promise<boolean>;
   startRecording: () => Promise<void>;
   stopRecording: () => Promise<void>;
   debug: PerioDebugState;

@@ -23,6 +23,7 @@ export function TranscriptPanel() {
     isRecording,
     transcriptionError,
     socketUrl,
+    unlockAudio,
     startRecording,
     stopRecording,
   } = usePerioChart();
@@ -75,6 +76,7 @@ export function TranscriptPanel() {
           <button
             type="button"
             onClick={() => {
+              void unlockAudio();
               void startRecording();
             }}
             disabled={isRecording}
