@@ -11,7 +11,7 @@ interface PerioChartProps {
 
 export function PerioChart({ teeth, activeTooth, activeSurface, activeSiteIndex }: PerioChartProps) {
   return (
-    <div className="space-y-3">
+    <div className="space-y-2">
       <SimpleToothMap teeth={teeth} activeTooth={activeTooth} />
     </div>
   );

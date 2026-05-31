@@ -365,7 +365,7 @@ export function FinalReportWorkflow({ doctorName }: FinalReportWorkflowProps) {
 
   return (
     <>
-      <div className="fixed bottom-6 right-6 z-50 flex flex-col items-end gap-3">
+      <div className="fixed right-6 top-6 z-50 flex flex-col items-end gap-3">
         {toastMessage ? (
           <div className="max-w-[320px] rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-medium text-rose-800 shadow-lg">
             {toastMessage}

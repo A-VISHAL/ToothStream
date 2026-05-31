@@ -64,7 +64,7 @@ function Dashboard({ doctorName, patient }: { doctorName: string; patient: Patie
   } = usePerioChart();
 
   return (
-    <div className="app-shell relative px-4 py-4 sm:px-6 lg:px-8">
+    <div className="app-shell relative px-3 py-3 sm:px-4 lg:px-6">
       {commandFeedback ? (
         <div className="command-toast fixed right-4 top-4 z-50 rounded-full border px-4 py-2 text-xs font-semibold uppercase tracking-[0.24em] text-slate-950 opacity-100 transition-all duration-200 ease-out sm:right-6 sm:top-6">
           <span
@@ -83,32 +83,32 @@ function Dashboard({ doctorName, patient }: { doctorName: string; patient: Patie
         </div>
       ) : null}
 
-      <div className="relative mx-auto flex min-h-[calc(100vh-2rem)] max-w-[1800px] flex-col gap-4">
-        <header className="panel-surface rounded-[32px] px-5 py-4 sm:px-6">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+      <div className="relative mx-auto flex min-h-[calc(100vh-1.5rem)] max-w-[1800px] flex-col gap-3">
+        <header className="panel-surface rounded-[24px] px-4 py-3 sm:px-5">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.38em] text-cyan-700/80">Dental Voice Charting AI</p>
-              <h1 className="mt-2 text-3xl font-semibold tracking-tight text-slate-950 sm:text-4xl">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.38em] text-cyan-700/80">Dental Voice Charting AI</p>
+              <h1 className="mt-1.5 text-2xl font-semibold tracking-tight text-slate-950 sm:text-[2rem]">
                 Real-time periodontal charting workspace
               </h1>
-              <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600 sm:text-[15px]">
+              <p className="mt-1.5 max-w-3xl text-[13px] leading-5 text-slate-600 sm:text-sm">
                 Clinical-style charting surface with live tooth updates, SVG rendering, websocket connectivity, and real Deepgram speech-to-text.
               </p>
             </div>
 
             <div className="flex items-center gap-3">
-              <span className="rounded-full border border-cyan-200 bg-cyan-50 px-4 py-2 text-xs font-semibold uppercase tracking-[0.24em] text-cyan-800">
+              <span className="rounded-full border border-cyan-200 bg-cyan-50 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.24em] text-cyan-800">
                 {doctorName}
               </span>
               {patient ? (
-                <span className="rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-semibold uppercase tracking-[0.24em] text-slate-700 shadow-sm">
+                <span className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.24em] text-slate-700 shadow-sm">
                   {patient.name}
                 </span>
               ) : null}
 
             <div className="flex flex-wrap items-center gap-3 text-sm">
               <span
-                className={`rounded-full border px-3 py-2 font-semibold uppercase tracking-[0.24em] ${
+                className={`rounded-full border px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.24em] ${
                   connectionState === 'connected' || connectionState === 'listening'
                     ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
                     : connectionState === 'reconnecting'
@@ -120,7 +120,7 @@ function Dashboard({ doctorName, patient }: { doctorName: string; patient: Patie
               >
                 {connectionState}
               </span>
-              <span className="rounded-full border border-slate-200 bg-white px-3 py-2 font-medium text-slate-700 shadow-sm">
+              <span className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[10px] font-medium text-slate-700 shadow-sm">
                 {connectionState === 'connected' || connectionState === 'listening'
                   ? 'Connected to Deepgram'
                   : connectionState === 'reconnecting'
@@ -132,9 +132,9 @@ function Dashboard({ doctorName, patient }: { doctorName: string; patient: Patie
           </div>
         </header>
 
-        <main className="grid flex-1 gap-4 xl:grid-cols-[380px,minmax(0,1fr)] xl:items-start min-h-0">
-          <aside className="order-2 min-h-0 xl:order-1 xl:sticky xl:top-4 self-start">
-            <div className="space-y-4">
+        <main className="grid flex-1 min-h-0 gap-3 xl:grid-cols-[360px,minmax(0,1fr)] xl:items-start">
+          <aside className="order-2 min-h-0 self-start xl:sticky xl:top-3 xl:order-1">
+            <div className="space-y-3">
               <TranscriptPanel />
 
               <StatusBar
@@ -151,7 +151,7 @@ function Dashboard({ doctorName, patient }: { doctorName: string; patient: Patie
           </aside>
 
           <section className="order-1 min-w-0 min-h-0 xl:order-2">
-            <div className="panel-surface rounded-[32px] p-4 sm:p-5">
+            <div className="panel-surface rounded-[24px] p-3 sm:p-4">
               <PerioChart
                 teeth={teeth}
                 activeTooth={currentTooth}

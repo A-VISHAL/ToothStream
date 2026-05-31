@@ -155,82 +155,84 @@ export function EnhancedToothCard({ tooth, isActive, arch, compact = false }: En
 
   return (
     <div
-      className={`flex w-full min-w-0 flex-col items-center overflow-hidden rounded-lg border-2 transition-all ${compact ? 'gap-1.5 p-2' : 'gap-2 p-3'} ${severity.bg} ${severity.border} ${isActive ? 'ring-2 ring-cyan-400 shadow-md' : ''}`}
+      className={`group relative flex w-full min-w-0 flex-col items-center overflow-hidden rounded-[14px] border transition-all ${compact ? 'gap-1 px-1.5 pb-1.5 pt-2' : 'gap-1.5 px-2 pb-2 pt-2.5'} ${severity.bg} ${severity.border} ${isActive ? 'active-tooth shadow-[0_10px_24px_rgba(14,165,233,0.16)]' : 'shadow-[0_6px_18px_rgba(15,23,42,0.04)]'}`}
     >
-      {/* Tooth Number & Severity Indicator */}
-      <div className="flex items-center justify-between w-full">
-        <span className={`font-bold text-slate-700 ${compact ? 'text-[11px]' : 'text-sm'}`}>{tooth.toothNumber}</span>
-        <span className={compact ? 'text-sm' : 'text-base'}>{severity.icon}</span>
+      <div className="absolute left-1.5 top-1.5 flex items-center gap-1">
+        <span className={`rounded-full border border-white/80 bg-white/90 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-slate-700 shadow-sm ${isActive ? 'text-cyan-800' : ''}`}>
+          {tooth.toothNumber}
+        </span>
       </div>
 
-      {/* Real Tooth SVG */}
-      <div className={`flex justify-center ${compact ? 'h-20' : 'h-24'}`}>
+      <div className="absolute right-1.5 top-1.5 flex items-center gap-1">
+        <span className={`inline-flex h-4.5 w-4.5 items-center justify-center rounded-full border border-white/80 text-[10px] leading-none shadow-sm ${severity.level === 'danger' ? 'bg-rose-500 text-white' : severity.level === 'warning' ? 'bg-amber-400 text-white' : severity.level === 'safe' ? 'bg-emerald-400 text-white' : 'bg-slate-300 text-slate-700'}`}>
+          {severity.icon}
+        </span>
+      </div>
+
+      <div className={`relative flex w-full justify-center ${compact ? 'h-[5.6rem]' : 'h-[6.5rem]'}`}>
         <ToothSVGRenderer toothNumber={tooth.toothNumber} arch={arch} compact={compact} />
-      </div>
 
-      {/* Findings Tags */}
-      {compact ? (
-        <div
-          className={`rounded-full px-2.5 py-1 text-[9px] font-semibold whitespace-nowrap ${
-            compactFindingLabel === 'Missing'
-              ? 'bg-gray-200 text-gray-800'
-              : compactFindingLabel === 'Implant'
-                ? 'bg-gray-200 text-gray-800'
-                : compactFindingLabel === 'Bleeding'
-                  ? 'bg-red-200 text-red-800'
-                  : compactFindingLabel === 'Pocket ≥5mm'
-                    ? 'bg-red-200 text-red-800'
-                    : compactFindingLabel === 'Pocket ≥4mm'
-                      ? 'bg-orange-200 text-orange-800'
-                      : compactFindingLabel.startsWith('Charted')
-                        ? 'bg-yellow-200 text-yellow-800'
-                        : 'bg-green-200 text-green-800'
-          }`}
-        >
-          {compactFindingLabel}
-        </div>
-      ) : (
-        <div className="flex flex-wrap justify-center gap-1">
-          {findings.map((finding) => (
+        <div className="pointer-events-none absolute inset-x-0 bottom-1 flex justify-center">
+          {compact ? (
             <span
-              key={finding}
-              className={`whitespace-nowrap rounded-full px-2 py-1 text-[10px] font-semibold ${
-                finding.includes('Missing') ? 'bg-gray-200 text-gray-800' :
-                finding.includes('Implant') ? 'bg-blue-200 text-blue-800' :
-                finding.includes('Bleeding') ? 'bg-red-200 text-red-800' :
-                finding.includes('Pocket ≥5mm') ? 'bg-red-200 text-red-800' :
-                finding.includes('Pocket ≥4mm') ? 'bg-orange-200 text-orange-800' :
-                finding.includes('Charted') ? 'bg-yellow-200 text-yellow-800' :
-                'bg-green-200 text-green-800'
+              className={`rounded-full border px-2 py-0.5 text-[9px] font-semibold leading-none shadow-sm ${
+                compactFindingLabel === 'Missing'
+                  ? 'border-slate-300 bg-slate-100 text-slate-700'
+                  : compactFindingLabel === 'Implant'
+                    ? 'border-slate-300 bg-slate-100 text-slate-700'
+                    : compactFindingLabel === 'Bleeding'
+                      ? 'border-rose-200 bg-rose-100 text-rose-700'
+                      : compactFindingLabel === 'Pocket ≥5mm'
+                        ? 'border-rose-200 bg-rose-100 text-rose-700'
+                        : compactFindingLabel === 'Pocket ≥4mm'
+                          ? 'border-amber-200 bg-amber-100 text-amber-700'
+                          : compactFindingLabel.startsWith('Charted')
+                            ? 'border-amber-200 bg-amber-100 text-amber-700'
+                            : 'border-emerald-200 bg-emerald-100 text-emerald-700'
               }`}
             >
-              {finding}
+              {compactFindingLabel}
             </span>
-          ))}
-        </div>
-      )}
-
-      {/* Depth Data */}
-      {!tooth.missing && maxDepth > 0 && (
-        <div className={`w-full text-center text-slate-600 ${compact ? 'text-[9px]' : 'text-[11px]'}`}>
-          {!compact ? <div className="font-semibold">Depths (mm)</div> : null}
-          <div className={`mt-1 grid grid-cols-2 gap-1 ${compact ? 'text-[9px]' : 'text-[10px]'}`}>
-            <div>
-              <span className="font-semibold">B:</span> {tooth.buccal.depth.join('-')}
+          ) : (
+            <div className="flex flex-wrap justify-center gap-1">
+              {findings.slice(0, 2).map((finding) => (
+                <span
+                  key={finding}
+                  className={`whitespace-nowrap rounded-full border px-2 py-0.5 text-[9px] font-semibold leading-none shadow-sm ${
+                    finding.includes('Missing')
+                      ? 'border-slate-300 bg-slate-100 text-slate-700'
+                      : finding.includes('Implant')
+                        ? 'border-slate-300 bg-slate-100 text-slate-700'
+                        : finding.includes('Bleeding')
+                          ? 'border-rose-200 bg-rose-100 text-rose-700'
+                          : finding.includes('Pocket ≥5mm')
+                            ? 'border-rose-200 bg-rose-100 text-rose-700'
+                            : finding.includes('Pocket ≥4mm')
+                              ? 'border-amber-200 bg-amber-100 text-amber-700'
+                              : finding.includes('Charted')
+                                ? 'border-amber-200 bg-amber-100 text-amber-700'
+                                : 'border-emerald-200 bg-emerald-100 text-emerald-700'
+                  }`}
+                >
+                  {finding}
+                </span>
+              ))}
             </div>
-            <div>
-              <span className="font-semibold">L:</span> {tooth.lingual.depth.join('-')}
-            </div>
-          </div>
+          )}
         </div>
-      )}
+      </div>
 
-      {/* Bleeding Indicator */}
-      {(tooth.buccal.bleeding || tooth.lingual.bleeding) && (
-        <div className={`w-full rounded text-center font-semibold text-red-700 bg-red-100 ${compact ? 'px-1.5 py-0.5 text-[9px]' : 'px-2 py-1 text-[10px]'}`}>
-          Bleeding Detected
+      {!compact && !tooth.missing && maxDepth > 0 ? (
+        <div className="w-full px-1 pb-0.5 text-center text-[9px] text-slate-500">
+          <span className="font-semibold text-slate-600">B</span> {tooth.buccal.depth.join('-')} · <span className="font-semibold text-slate-600">L</span> {tooth.lingual.depth.join('-')}
         </div>
-      )}
+      ) : null}
+
+      {(tooth.buccal.bleeding || tooth.lingual.bleeding) && compact ? (
+        <span className="absolute bottom-1.5 right-1.5 rounded-full border border-rose-200 bg-rose-100 px-1.5 py-0.5 text-[9px] font-semibold leading-none text-rose-700 shadow-sm">
+          Bleed
+        </span>
+      ) : null}
     </div>
   );
 }
