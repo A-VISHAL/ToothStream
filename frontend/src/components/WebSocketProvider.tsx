@@ -1,4 +1,6 @@
 import React, { createContext, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { evaluateClinicalRules } from '../clinicalRules';
+import { buildLiveClinicalRulesInput } from './clinicalRulesBridge';
 import { evaluateClinicalSpeechIntent, parseTranscriptToPayload } from './transcriptParser';
 import { useClinicalSoundManager, type ClinicalSoundTrigger, type ClinicalSoundType } from './useClinicalSoundManager';
 import { useDeepgramTranscription } from './useDeepgramTranscription';
@@ -149,6 +151,14 @@ function hydratePayload(payload: PerioPayload): PerioPayload {
 }
 
 type FindingSound = 'acknowledgment' | 'commit';
+
+function isCommitPayload(payload: PerioPayload | null): boolean {
+  if (!payload) {
+    return false;
+  }
+
+  return Array.isArray(payload.depth);
+}
 
 
 function ingestPayload(
@@ -1131,6 +1141,60 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
         ...previous,
       ].slice(0, 12));
       return;
+    }
+
+    const liveRuleInput = buildLiveClinicalRulesInput({
+      transcript: latestFinal.text,
+      payload,
+      currentTooth: resolvedCurrentTooth,
+      currentSurface: resolvedCurrentSurface,
+    });
+
+    if (liveRuleInput) {
+      console.info('RULE_ENGINE_ENTER', {
+        transcript: latestFinal.text.trim(),
+        hasPayload: payload !== null,
+        commitCandidate: isCommitPayload(payload),
+      });
+
+      const liveRuleResult = evaluateClinicalRules(liveRuleInput);
+
+      console.info('RULE_ENGINE_RESULT', {
+        verified: liveRuleResult.verified,
+        suspicious: liveRuleResult.suspicious,
+        reasons: liveRuleResult.reasons,
+      });
+
+      if (!liveRuleResult.verified) {
+        console.info('LIVE_COMMIT_BLOCKED', {
+          transcript: latestFinal.text.trim(),
+          reasons: liveRuleResult.reasons,
+        });
+        console.info('WHISPER_CANDIDATE_LIVE', {
+          transcript: latestFinal.text.trim(),
+          reasons: liveRuleResult.reasons,
+        });
+        pushDebugTimeline('parser', 'rule engine blocked', liveRuleResult.reasons.join(','));
+
+        setTranscriptEntries((previous) => {
+          const nextEntry = {
+            id: `socket-rule-block-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            text: latestFinal.text.trim(),
+            timestamp: Date.now(),
+            source: 'deepgram' as const,
+            isFinal: true,
+          };
+
+          return [nextEntry, ...previous].slice(0, 12);
+        });
+
+        return;
+      }
+
+      console.info('LIVE_COMMIT_ALLOWED', {
+        transcript: latestFinal.text.trim(),
+        reasons: liveRuleResult.reasons,
+      });
     }
 
     if (payload.tooth !== undefined && Array.isArray(payload.depth) && payload.depth.length === SITE_COUNT) {
