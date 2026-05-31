@@ -498,8 +498,8 @@ export function FinalReportWorkflow({ doctorName }: FinalReportWorkflowProps) {
 
               <div className="min-h-0 overflow-y-auto border-t border-slate-200 bg-white px-6 py-5 lg:border-l lg:border-t-0">
                 <div className="space-y-5">
-                  <section className="rounded-[28px] border border-slate-200 bg-slate-50 p-5">
-                    <SimpleToothMap teeth={teeth} activeTooth={currentTooth} />
+                  <section className="rounded-[28px] border border-slate-200 bg-slate-50 p-4 lg:p-3">
+                    <SimpleToothMap teeth={teeth} activeTooth={currentTooth} compact />
                   </section>
 
                   <section className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
