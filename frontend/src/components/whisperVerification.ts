@@ -6,6 +6,7 @@ const BACKEND_WHISPER_ENDPOINT = `${apiBaseUrl}/api/whisper-verify`;
 const OXLO_MODEL = 'whisper-large-v3';
 const WHISPER_SAMPLE_RATE = 16000;
 const WHISPER_CHANNELS = 1;
+export const WHISPER_MAX_AUDIO_CHUNKS = 30;
 
 export interface WhisperVerificationInput {
   audioChunks: ArrayBuffer[];
@@ -82,14 +83,31 @@ function buildWavBlob(audioChunks: ArrayBuffer[]): Blob | null {
   });
 }
 
+function selectWhisperAudioChunks(audioChunks: ArrayBuffer[], maxChunks: number): { selectedChunks: ArrayBuffer[]; trimmedChunks: number } {
+  const boundedMaxChunks = Math.max(1, Math.trunc(maxChunks));
+
+  if (audioChunks.length <= boundedMaxChunks) {
+    return {
+      selectedChunks: audioChunks.slice(),
+      trimmedChunks: 0,
+    };
+  }
+
+  return {
+    selectedChunks: audioChunks.slice(-boundedMaxChunks),
+    trimmedChunks: audioChunks.length - boundedMaxChunks,
+  };
+}
+
 export async function verifySuspiciousTranscriptWithWhisper(
   input: WhisperVerificationInput
 ): Promise<WhisperVerificationResult> {
+  const { selectedChunks, trimmedChunks } = selectWhisperAudioChunks(input.audioChunks, WHISPER_MAX_AUDIO_CHUNKS);
   const whisperStartAt = Date.now();
   console.info('WHISPER_START', {
     originalTranscript: input.originalTranscript,
     suspiciousReasons: input.suspiciousReasons,
-    audioChunks: input.audioChunks.length,
+    audioChunks: selectedChunks.length,
     ts: whisperStartAt,
   });
   console.info('WHISPER_AUTH_CHECK', { usingBackendProxy: true });
@@ -97,7 +115,7 @@ export async function verifySuspiciousTranscriptWithWhisper(
   console.info('WHISPER_TRIGGERED', {
     originalTranscript: input.originalTranscript,
     suspiciousReasons: input.suspiciousReasons,
-    audioChunks: input.audioChunks.length,
+    audioChunks: selectedChunks.length,
   });
 
   const fallbackResult: WhisperVerificationResult = {
@@ -110,7 +128,7 @@ export async function verifySuspiciousTranscriptWithWhisper(
     aiVerified: false,
   };
 
-  const audioBlob = buildWavBlob(input.audioChunks);
+  const audioBlob = buildWavBlob(selectedChunks);
 
   if (!audioBlob) {
     console.info('WHISPER_FALLBACK', {
@@ -121,14 +139,15 @@ export async function verifySuspiciousTranscriptWithWhisper(
     return fallbackResult;
   }
 
-  // Log audio window metrics
-  const totalAudioByteLength = input.audioChunks.reduce((sum, chunk) => sum + chunk.byteLength, 0);
+  const totalAudioByteLength = selectedChunks.reduce((sum, chunk) => sum + chunk.byteLength, 0);
   const audioDurationMs = (totalAudioByteLength / (WHISPER_SAMPLE_RATE * WHISPER_CHANNELS * 2)) * 1000;
-  console.info('WHISPER_AUDIO_WINDOW', {
-    chunkCount: input.audioChunks.length,
-    totalAudioBytes: totalAudioByteLength,
-    estimatedAudioDurationMs: Math.round(audioDurationMs),
-    blobSizeBytes: audioBlob.size,
+  console.info('WHISPER_WINDOW_TRIMMED', {
+    originalChunks: input.audioChunks.length,
+    selectedChunks: selectedChunks.length,
+    trimmedChunks,
+    maxChunks: WHISPER_MAX_AUDIO_CHUNKS,
+    estimatedDurationMs: Math.round(audioDurationMs),
+    blobBytes: audioBlob.size,
   });
 
   try {

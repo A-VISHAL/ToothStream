@@ -2,7 +2,7 @@ import React, { createContext, useCallback, useEffect, useMemo, useRef, useState
 import { evaluateClinicalSpeechIntent, parseTranscriptToPayload } from './transcriptParser';
 import { useClinicalSoundManager, type ClinicalSoundTrigger, type ClinicalSoundType } from './useClinicalSoundManager';
 import { useDeepgramTranscription } from './useDeepgramTranscription';
-import { verifySuspiciousTranscriptWithWhisper } from './whisperVerification';
+import { verifySuspiciousTranscriptWithWhisper, WHISPER_MAX_AUDIO_CHUNKS } from './whisperVerification';
 import type {
   AiVerificationRecord,
   CommandFeedback,
@@ -1107,13 +1107,14 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
 
     if (speechFilter.aliasCandidate) {
       void (async () => {
-        const audioChunks = getRecentAudioChunks();
+        const audioChunks = getRecentAudioChunks(WHISPER_MAX_AUDIO_CHUNKS);
         const suspiciousReasons = [speechFilter.reason, speechFilter.aliasCanonical ? `alias:${speechFilter.aliasCanonical}` : 'alias_candidate'].filter(Boolean);
 
         console.info('LIVE_WHISPER_CALL', {
           transcript: latestFinal.text.trim(),
           suspiciousReasons,
-          audioChunks: audioChunks.length,
+          selectedChunks: audioChunks.length,
+          maxChunks: WHISPER_MAX_AUDIO_CHUNKS,
           aliasCanonical: speechFilter.aliasCanonical ?? null,
         });
 

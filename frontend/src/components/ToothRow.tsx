@@ -1,5 +1,5 @@
 import React from 'react';
-import { Tooth } from './Tooth';
+import { EnhancedToothCard } from './EnhancedToothCard';
 import type { ToothState, ToothSurface } from '../types';
 
 interface ToothRowProps {
@@ -10,6 +10,7 @@ interface ToothRowProps {
   activeTooth: number | null;
   activeSurface: ToothSurface | null;
   activeSiteIndex: number | null;
+  arch: 'maxillary' | 'mandibular';
 }
 
 export function ToothRow({
@@ -20,6 +21,7 @@ export function ToothRow({
   activeTooth,
   activeSurface,
   activeSiteIndex,
+  arch,
 }: ToothRowProps) {
   return (
     <section className="rounded-[28px] border border-slate-200/80 bg-white/70 p-4 shadow-[0_18px_42px_rgba(15,23,42,0.06)] backdrop-blur">
@@ -33,14 +35,33 @@ export function ToothRow({
         </div>
       </header>
 
-      <div className="chart-scrollbar flex justify-start gap-3 overflow-x-auto pb-2 pr-2 xl:justify-center">
+      {/* Legend */}
+      <div className="mb-4 flex flex-wrap gap-2 text-[11px]">
+        <span className="flex items-center gap-1.5">
+          <span className="inline-block w-3 h-3 bg-green-100 border border-green-300 rounded"></span>
+          <span className="text-green-700">Healthy</span>
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="inline-block w-3 h-3 bg-yellow-100 border border-yellow-300 rounded"></span>
+          <span className="text-yellow-700">Charted</span>
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="inline-block w-3 h-3 bg-orange-100 border border-orange-300 rounded"></span>
+          <span className="text-orange-700">Moderate</span>
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="inline-block w-3 h-3 bg-red-100 border border-red-300 rounded"></span>
+          <span className="text-red-700">Critical</span>
+        </span>
+      </div>
+
+      <div className="grid grid-cols-4 sm:grid-cols-6 lg:grid-cols-8 gap-3 overflow-x-auto pb-2">
         {teeth.map((toothNumber) => (
-          <Tooth
+          <EnhancedToothCard
             key={toothNumber}
             tooth={chart[toothNumber]}
-            activeTooth={activeTooth}
-            activeSurface={activeSurface}
-            activeSiteIndex={activeSiteIndex}
+            isActive={activeTooth === toothNumber}
+            arch={arch}
           />
         ))}
       </div>

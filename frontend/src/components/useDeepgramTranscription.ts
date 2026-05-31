@@ -150,7 +150,15 @@ export function useDeepgramTranscription() {
     pendingChunksRef.current = [];
   }, []);
 
-  const getRecentAudioChunks = useCallback(() => recentChunksRef.current.slice(), []);
+  const getRecentAudioChunks = useCallback((maxChunks = MAX_RECENT_CHUNKS) => {
+    const boundedMaxChunks = Math.max(0, Math.trunc(maxChunks));
+
+    if (boundedMaxChunks === 0) {
+      return [];
+    }
+
+    return recentChunksRef.current.slice(-boundedMaxChunks);
+  }, []);
 
   const pushSegment = useCallback((text: string) => {
     const transcript = text.trim();
