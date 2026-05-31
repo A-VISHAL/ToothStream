@@ -1,5 +1,6 @@
 import React from 'react';
 import { usePerioChart } from './WebSocketProvider';
+import { generateClinicalReport, type ClinicalReportOutput } from './reportGeneration';
 
 function formatTime(timestamp: number): string {
   return new Date(timestamp).toLocaleTimeString([], {
@@ -10,11 +11,35 @@ function formatTime(timestamp: number): string {
 }
 
 export function DebugPanel() {
-  const { debug, toggleDebugCollapsed } = usePerioChart();
+  const { debug, toggleDebugCollapsed, teeth, currentTooth, currentSurface, activeSiteIndex, aiVerificationRecords } = usePerioChart();
+  const [isGeneratingReport, setIsGeneratingReport] = React.useState(false);
+  const [clinicalReport, setClinicalReport] = React.useState<ClinicalReportOutput | null>(null);
+  const [reportError, setReportError] = React.useState<string | null>(null);
 
   if (!debug.available) {
     return null;
   }
+
+  const handleGenerateReport = async () => {
+    setIsGeneratingReport(true);
+    setReportError(null);
+
+    try {
+      const report = await generateClinicalReport({
+        teeth,
+        currentTooth,
+        currentSurface,
+        activeSiteIndex,
+        aiVerificationRecords,
+      });
+
+      setClinicalReport(report);
+    } catch (error) {
+      setReportError(error instanceof Error ? error.message : 'Unable to generate report.');
+    } finally {
+      setIsGeneratingReport(false);
+    }
+  };
 
   return (
     <div className="pointer-events-auto fixed bottom-4 right-4 z-40 w-[360px] max-w-[92vw]">
@@ -101,6 +126,60 @@ export function DebugPanel() {
                   <p className="text-[11px] text-slate-500">No timeline events yet.</p>
                 )}
               </div>
+            </section>
+
+            <section className="rounded-xl border border-slate-800 bg-slate-900/70 p-3">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-cyan-300">AI report</p>
+                  <p className="mt-1 text-xs text-slate-400">Manual clinical summary generation</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    void handleGenerateReport();
+                  }}
+                  disabled={isGeneratingReport}
+                  className="rounded-md border border-cyan-200 bg-cyan-50 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-cyan-800 transition hover:bg-cyan-100 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {isGeneratingReport ? 'Generating' : 'Generate Report'}
+                </button>
+              </div>
+
+              {reportError ? <p className="mt-3 text-xs text-rose-300">{reportError}</p> : null}
+
+              {clinicalReport ? (
+                <div className="mt-3 space-y-3 rounded-md border border-slate-800 bg-slate-950 p-3 text-xs text-slate-200">
+                  <div>
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-cyan-300">Clinical Summary</p>
+                    <p className="mt-1 leading-5 text-slate-200">{clinicalReport.summary}</p>
+                  </div>
+
+                  <div>
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-cyan-300">Key Findings</p>
+                    <ul className="mt-1 list-disc space-y-1 pl-4 leading-5 text-slate-200">
+                      {clinicalReport.findings.map((finding) => (
+                        <li key={finding}>{finding}</li>
+                      ))}
+                    </ul>
+                  </div>
+
+                  <div>
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-cyan-300">Risk Assessment</p>
+                    <p className="mt-1 leading-5 text-slate-200">{clinicalReport.risk}</p>
+                  </div>
+
+                  <div>
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-cyan-300">Suggested Treatment Direction</p>
+                    <p className="mt-1 leading-5 text-slate-200">{clinicalReport.treatment}</p>
+                  </div>
+
+                  <div>
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-cyan-300">AI Notes</p>
+                    <p className="mt-1 leading-5 text-slate-300">{clinicalReport.aiNotes}</p>
+                  </div>
+                </div>
+              ) : null}
             </section>
           </div>
         ) : null}

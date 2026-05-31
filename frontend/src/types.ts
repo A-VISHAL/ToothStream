@@ -73,6 +73,19 @@ export interface TranscriptEntry {
   isFinal?: boolean;
 }
 
+export interface AiVerificationRecord {
+  id: string;
+  timestamp: number;
+  originalTranscript: string;
+  whisperTranscript: string;
+  correctedTranscript: string;
+  confidence: number;
+  reasoning: string;
+  aiVerified: boolean;
+  suspiciousReasons: string[];
+  decision?: 'whisper' | 'deepgram' | 'no_decision';
+}
+
 export interface PerioDebugStreamEntry {
   id: string;
   label: 'INTERIM' | 'FINAL' | 'SOCKET';
@@ -129,4 +142,5 @@ export interface PerioChartContextValue {
   debug: PerioDebugState;
   toggleDebugCollapsed: () => void;
   teeth: Record<number, ToothState>;
+  aiVerificationRecords: AiVerificationRecord[];
 }

@@ -1,7 +1,7 @@
 import { decideTranscriptWithDeepSeek } from './deepseekDecision';
 
 describe('decideTranscriptWithDeepSeek', () => {
-  it('logs model access denial and retries with a fallback slug on 403', async () => {
+  it('uses deepseek-v3.2 as the primary model and returns a verified decision on 200', async () => {
     const previousReactAppKey = process.env.REACT_APP_OXLO_API_KEY;
     const previousViteKey = process.env.VITE_OXLO_API_KEY;
     process.env.REACT_APP_OXLO_API_KEY = 'test-oxlo-key';
@@ -10,13 +10,18 @@ describe('decideTranscriptWithDeepSeek', () => {
     const infoSpy = jest.spyOn(console, 'info').mockImplementation(() => undefined);
     const fetchSpy = jest.spyOn(globalThis as any, 'fetch');
 
-    fetchSpy
-      .mockImplementationOnce(async () => ({
-        ok: false,
-        status: 403,
-        text: async () => 'model access denied',
-      }))
-      .mockImplementationOnce(async () => ({
+    fetchSpy.mockImplementationOnce(async (_url, init) => {
+      expect(init).toEqual(
+        expect.objectContaining({
+          method: 'POST',
+          headers: expect.objectContaining({
+            Authorization: 'Bearer test-oxlo-key',
+          }),
+          body: expect.any(String),
+        })
+      );
+
+      return {
         ok: true,
         status: 200,
         json: async () => ({
@@ -26,7 +31,7 @@ describe('decideTranscriptWithDeepSeek', () => {
                 content: JSON.stringify({
                   correctedTranscript: 'lower left three three two',
                   confidence: 0.87,
-                  reasoning: 'Fallback model accepted the clinical context.',
+                  reasoning: 'Primary model accepted the clinical context.',
                   aiVerified: true,
                   decision: 'deepgram',
                 }),
@@ -34,7 +39,8 @@ describe('decideTranscriptWithDeepSeek', () => {
             },
           ],
         }),
-      }));
+      };
+    });
 
     const result = await decideTranscriptWithDeepSeek({
       deepgramTranscript: 'lower left 332',
@@ -44,7 +50,7 @@ describe('decideTranscriptWithDeepSeek', () => {
       surfaceContext: 'buccal',
     });
 
-    expect(fetchSpy).toHaveBeenCalledTimes(2);
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
     expect(result).toEqual(
       expect.objectContaining({
         correctedTranscript: 'lower left three three two',
@@ -52,25 +58,40 @@ describe('decideTranscriptWithDeepSeek', () => {
         decision: 'deepgram',
       })
     );
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
     expect(infoSpy).toHaveBeenCalledWith(
       'DEEPSEEK_AUTH_CHECK',
       expect.objectContaining({
         keyPresent: true,
         keyLength: 'test-oxlo-key'.length,
-        modelName: 'deepseek-v3-0324',
+        modelName: 'deepseek-v3.2',
       })
     );
     expect(infoSpy).toHaveBeenCalledWith(
-      'DEEPSEEK_MODEL_ACCESS',
+      'DEEPSEEK_REQUEST_START',
       expect.objectContaining({
-        modelName: 'deepseek-v3-0324',
-        status: 403,
-        responseBodyText: 'model access denied',
+        modelName: 'deepseek-v3.2',
       })
     );
     expect(infoSpy).toHaveBeenCalledWith(
-      'DEEPSEEK_AUTH_CHECK',
+      'DEEPSEEK_RESPONSE',
       expect.objectContaining({
+        ok: true,
+        status: 200,
+        modelName: 'deepseek-v3.2',
+      })
+    );
+    expect(infoSpy).toHaveBeenCalledWith(
+      'DEEPSEEK_DECISION',
+      expect.objectContaining({
+        correctedTranscript: 'lower left three three two',
+        modelName: 'deepseek-v3.2',
+      })
+    );
+    expect(infoSpy).toHaveBeenCalledWith(
+      'AI_VERIFIED',
+      expect.objectContaining({
+        correctedTranscript: 'lower left three three two',
         modelName: 'deepseek-v3.2',
       })
     );

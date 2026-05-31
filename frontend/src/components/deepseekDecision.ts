@@ -1,5 +1,5 @@
 const OXLO_CHAT_ENDPOINT = 'https://api.oxlo.ai/v1/chat/completions';
-const OXLO_MODEL_CANDIDATES = ['deepseek-v3-0324', 'deepseek-v3.2'];
+const OXLO_MODEL = 'deepseek-v3.2';
 
 function resolveOxloApiKey(): string | undefined {
   const reactAppKey = process.env.REACT_APP_OXLO_API_KEY;
@@ -36,15 +36,6 @@ interface DeepSeekAttemptSuccess {
   responseBody: unknown;
   modelName: string;
 }
-
-interface DeepSeekAttemptAccessDenied {
-  accessDenied: true;
-  modelName: string;
-  status: number;
-  responseBodyText: string;
-}
-
-type DeepSeekAttemptResult = DeepSeekAttemptSuccess | DeepSeekAttemptAccessDenied;
 
 function extractChatContent(responseBody: unknown): string {
   if (!responseBody || typeof responseBody !== 'object') {
@@ -166,19 +157,18 @@ function buildNoDecision(reasoning: string): DeepSeekDecisionResult {
 }
 
 async function attemptDeepSeekRequest(
-  modelName: string,
   apiKey: string,
   input: DeepSeekDecisionInput
-): Promise<DeepSeekAttemptResult> {
+): Promise<DeepSeekAttemptSuccess> {
   console.info('DEEPSEEK_AUTH_CHECK', {
     keyPresent: Boolean(apiKey),
     keyLength: apiKey.length,
-    modelName,
+    modelName: OXLO_MODEL,
   });
 
   console.info('DEEPSEEK_REQUEST_START', {
     endpoint: OXLO_CHAT_ENDPOINT,
-    modelName,
+    modelName: OXLO_MODEL,
     deepgramTranscript: input.deepgramTranscript,
     whisperTranscript: input.whisperTranscript,
     suspiciousReasons: input.suspiciousReasons,
@@ -193,7 +183,7 @@ async function attemptDeepSeekRequest(
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      model: modelName,
+      model: OXLO_MODEL,
       temperature: 0,
       messages: [
         {
@@ -211,32 +201,23 @@ async function attemptDeepSeekRequest(
   console.info('DEEPSEEK_RESPONSE', {
     ok: response.ok,
     status: response.status,
-    modelName,
+    modelName: OXLO_MODEL,
   });
 
   if (!response.ok) {
     const responseBodyText = await response.text();
     console.info('DEEPSEEK_MODEL_ACCESS', {
-      modelName,
+      modelName: OXLO_MODEL,
       status: response.status,
       responseBodyText,
     });
-
-    if (response.status === 403) {
-      return {
-        accessDenied: true,
-        modelName,
-        status: response.status,
-        responseBodyText,
-      };
-    }
 
     throw new Error(`DeepSeek request failed with status ${response.status}`);
   }
 
   return {
     responseBody: (await response.json()) as unknown,
-    modelName,
+    modelName: OXLO_MODEL,
   };
 }
 
@@ -298,62 +279,29 @@ export async function decideTranscriptWithDeepSeek(
   }
 
   try {
-    let accessDeniedAttempt: DeepSeekAttemptAccessDenied | null = null;
+    const attempt = await attemptDeepSeekRequest(apiKey, input);
+    const content = extractChatContent(attempt.responseBody);
+    const parsed = extractJsonObject(content);
+    const result = normalizeDecisionResult(parsed, input, 'invalid_deepseek_response');
 
-    for (const modelName of OXLO_MODEL_CANDIDATES) {
-      const attempt = await attemptDeepSeekRequest(modelName, apiKey, input);
+    console.info('DEEPSEEK_DECISION', {
+      ...result,
+      modelName: attempt.modelName,
+    });
 
-      if ('accessDenied' in attempt) {
-        accessDeniedAttempt = attempt;
-        continue;
-      }
-
-      const content = extractChatContent(attempt.responseBody);
-      const parsed = extractJsonObject(content);
-      const result = normalizeDecisionResult(parsed, input, 'invalid_deepseek_response');
-
-      console.info('DEEPSEEK_DECISION', {
+    if (result.decision === 'no_decision') {
+      console.info('NO_DECISION', {
         ...result,
         modelName: attempt.modelName,
       });
-
-      if (result.decision === 'no_decision') {
-        console.info('NO_DECISION', {
-          ...result,
-          modelName: attempt.modelName,
-        });
-      } else {
-        console.info('AI_VERIFIED', {
-          ...result,
-          modelName: attempt.modelName,
-        });
-      }
-
-      return result;
-    }
-
-    if (accessDeniedAttempt) {
-      const fallback = buildNoDecision(`model_access_denied:${accessDeniedAttempt.modelName}`);
-      console.info('DEEPSEEK_FALLBACK', {
-        reason: fallback.reasoning,
-        deepgramTranscript: input.deepgramTranscript,
-        whisperTranscript: input.whisperTranscript,
-        modelName: accessDeniedAttempt.modelName,
-        status: accessDeniedAttempt.status,
-        responseBodyText: accessDeniedAttempt.responseBodyText,
+    } else {
+      console.info('AI_VERIFIED', {
+        ...result,
+        modelName: attempt.modelName,
       });
-      console.info('NO_DECISION', fallback);
-      return fallback;
     }
 
-    const fallback = buildNoDecision('no_deepseek_model_available');
-    console.info('DEEPSEEK_FALLBACK', {
-      reason: fallback.reasoning,
-      deepgramTranscript: input.deepgramTranscript,
-      whisperTranscript: input.whisperTranscript,
-    });
-    console.info('NO_DECISION', fallback);
-    return fallback;
+    return result;
   } catch (error) {
     const fallback = buildNoDecision(error instanceof Error ? error.message : 'unknown_deepseek_error');
     console.info('DEEPSEEK_FALLBACK', {
