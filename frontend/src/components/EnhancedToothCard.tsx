@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import type { ToothState, ToothSurface } from '../types';
+import type { ToothState } from '../types';
 import { RealIncisorSVG } from './RealIncisorSVG';
 import { RealCanineSVG } from './RealCanineSVG';
 import { RealPremolarSVG } from './RealPremolarSVG';
@@ -32,15 +32,15 @@ function getToothVariant(toothNumber: number): ToothVariant {
   return { type: 'molar', variant: 'molar-first', mirror: false };
 }
 
-function getSeverityColor(tooth: ToothState): { bg: string; border: string; icon: string; level: 'safe' | 'warning' | 'danger' } {
+function getSeverityColor(tooth: ToothState): { bg: string; border: string; icon: string; level: 'safe' | 'warning' | 'danger' | 'neutral' } {
   const maxDepth = Math.max(
     Math.max(...tooth.buccal.depth),
     Math.max(...tooth.lingual.depth)
   );
   const hasbleeding = tooth.buccal.bleeding || tooth.lingual.bleeding;
 
-  if (tooth.missing) return { bg: 'bg-gray-100', border: 'border-gray-300', icon: '⚠️', level: 'danger' };
-  if (tooth.implant) return { bg: 'bg-blue-50', border: 'border-blue-300', icon: '🦷', level: 'safe' };
+  if (tooth.missing) return { bg: 'bg-gray-100', border: 'border-gray-300', icon: '⚠️', level: 'neutral' };
+  if (tooth.implant) return { bg: 'bg-gray-100', border: 'border-gray-300', icon: '🦷', level: 'neutral' };
   
   if (hasbleeding || maxDepth >= 5) {
     return { bg: 'bg-red-50', border: 'border-red-300', icon: '🔴', level: 'danger' };

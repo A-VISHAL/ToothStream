@@ -39,7 +39,7 @@ export function SimpleToothMap({ teeth, activeTooth }: SimpleToothMapProps) {
         </div>
         <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-gray-50 border border-gray-200">
           <span className="text-lg">⚠️</span>
-          <span className="text-gray-800">Missing/Issue</span>
+          <span className="text-gray-800">Missing/Implant</span>
         </div>
       </div>
 

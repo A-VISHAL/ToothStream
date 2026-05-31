@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { jsPDF } from 'jspdf';
 import { generateClinicalReport, type ClinicalReportOutput } from './reportGeneration';
 import { buildChartStats, buildMeasurementRows, isReportReady, type ChartStats, type MeasurementRow } from './reportWorkflowUtils';
+import { SimpleToothMap } from './SimpleToothMap';
 import { usePerioChart } from './WebSocketProvider';
 
 interface FinalReportWorkflowProps {
@@ -13,9 +14,6 @@ interface ReportDraft {
   treatment: string;
   doctorNotes: string;
 }
-
-const MAXILLARY_ROW = Array.from({ length: 16 }, (_, index) => index + 1);
-const MANDIBULAR_ROW = Array.from({ length: 16 }, (_, index) => 32 - index);
 
 function formatTime(timestamp: number): string {
   return new Date(timestamp).toLocaleString([], {
@@ -365,11 +363,6 @@ export function FinalReportWorkflow({ doctorName }: FinalReportWorkflowProps) {
     }
   }, []);
 
-  const toothRows = [
-    { label: 'Maxillary', teeth: MAXILLARY_ROW },
-    { label: 'Mandibular', teeth: MANDIBULAR_ROW },
-  ];
-
   return (
     <>
       <div className="fixed bottom-6 right-6 z-50 flex flex-col items-end gap-3">
@@ -506,35 +499,7 @@ export function FinalReportWorkflow({ doctorName }: FinalReportWorkflowProps) {
               <div className="min-h-0 overflow-y-auto border-t border-slate-200 bg-white px-6 py-5 lg:border-l lg:border-t-0">
                 <div className="space-y-5">
                   <section className="rounded-[28px] border border-slate-200 bg-slate-50 p-5">
-                    <p className="text-[10px] font-semibold uppercase tracking-[0.32em] text-slate-500">Tooth Map</p>
-                    <div className="mt-4 space-y-3">
-                      {toothRows.map((row) => (
-                        <div key={row.label}>
-                          <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-500">{row.label}</p>
-                          <div className="grid grid-cols-8 gap-2 sm:grid-cols-8">
-                            {row.teeth.map((toothNumber) => {
-                              const tooth = teeth[toothNumber];
-                              const stateClasses = tooth.missing
-                                ? 'border-slate-300 bg-slate-200 text-slate-600'
-                                : tooth.implant
-                                  ? 'border-cyan-300 bg-cyan-50 text-cyan-800'
-                                  : tooth.updatedAt > 0
-                                    ? 'border-emerald-300 bg-emerald-50 text-emerald-800'
-                                    : 'border-slate-200 bg-white text-slate-500';
-
-                              return (
-                                <div key={toothNumber} className={`rounded-2xl border px-2 py-3 text-center text-[11px] font-semibold uppercase tracking-[0.18em] ${stateClasses}`}>
-                                  <div>{toothNumber}</div>
-                                  <div className="mt-2 text-[10px] font-medium normal-case tracking-normal">
-                                    {tooth.missing ? 'Missing' : tooth.implant ? 'Implant' : tooth.updatedAt > 0 ? 'Charted' : 'Open'}
-                                  </div>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
+                    <SimpleToothMap teeth={teeth} activeTooth={currentTooth} />
                   </section>
 
                   <section className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
