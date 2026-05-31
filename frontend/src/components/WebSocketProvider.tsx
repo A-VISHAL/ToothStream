@@ -1,6 +1,7 @@
 import React, { createContext, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { evaluateClinicalRules } from '../clinicalRules';
 import { buildLiveClinicalRulesInput } from './clinicalRulesBridge';
+import { verifySuspiciousTranscriptWithWhisper } from './whisperVerification';
 import { evaluateClinicalSpeechIntent, parseTranscriptToPayload } from './transcriptParser';
 import { useClinicalSoundManager, type ClinicalSoundTrigger, type ClinicalSoundType } from './useClinicalSoundManager';
 import { useDeepgramTranscription } from './useDeepgramTranscription';
@@ -1176,6 +1177,12 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
         });
         pushDebugTimeline('parser', 'rule engine blocked', liveRuleResult.reasons.join(','));
 
+        void verifySuspiciousTranscriptWithWhisper({
+          audioChunks: transcription.getRecentAudioChunks(),
+          originalTranscript: latestFinal.text.trim(),
+          suspiciousReasons: liveRuleResult.reasons,
+        });
+
         setTranscriptEntries((previous) => {
           const nextEntry = {
             id: `socket-rule-block-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -1241,6 +1248,7 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
     setTeeth,
     teeth,
     transcription.segments,
+    transcription,
     connectionState,
     parserMode,
     expectedInput,

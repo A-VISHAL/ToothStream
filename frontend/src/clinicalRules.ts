@@ -78,7 +78,7 @@ function detectSuspiciousTriplet(depth: number[]): boolean {
 
   const averageDepth = depth.reduce((sum, value) => sum + value, 0) / depth.length;
   const allHigh = depth.every((value) => value >= 8);
-  const repeatedExtremeValues = new Set(depth).size < depth.length && depth.some((value) => value >= 8);
+  const repeatedExtremeValues = depth.some((value) => value >= 8 && depth.filter((candidate) => candidate === value).length >= 2);
   const repeatedExtremePattern = depth[0] === depth[1] && depth[1] === depth[2] && depth[0] >= 8;
   const clinicallyUnrealisticAverage = averageDepth > 7;
 

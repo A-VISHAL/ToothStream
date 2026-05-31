@@ -6,6 +6,7 @@ export interface LiveClinicalRulesContext {
   payload: PerioPayload | null;
   currentTooth: number | null;
   currentSurface: ToothSurface | null;
+  speechConfidence?: number;
 }
 
 const NUMBER_WORDS: Record<string, number> = {
@@ -74,6 +75,19 @@ const RULE_TOKEN_WHITELIST = new Set([
   'from',
   'me',
 ]);
+
+const AMBIGUITY_PHRASES = [
+  'maybe',
+  'probably',
+  'possibly',
+  'around',
+  'roughly',
+  'approximately',
+  'guess',
+  'think',
+  'sort of',
+  'kind of',
+];
 
 function tokenizeTranscript(transcript: string): string[] {
   return transcript
@@ -151,6 +165,25 @@ function hasCommitContent(payload: PerioPayload | null): payload is PerioPayload
   return Array.isArray(payload.depth);
 }
 
+function estimateSpeechConfidence(transcript: string, unexpectedTokens: string[], payload: PerioPayload | null): number {
+  const cleaned = transcript.trim().toLowerCase();
+  let confidence = payload && Array.isArray(payload.depth) ? 0.96 : 0.72;
+
+  if (unexpectedTokens.length > 0) {
+    confidence -= 0.18;
+  }
+
+  if (AMBIGUITY_PHRASES.some((phrase) => cleaned.includes(phrase))) {
+    confidence -= 0.3;
+  }
+
+  if (cleaned.length === 0) {
+    confidence = 0.1;
+  }
+
+  return Math.max(0.1, Math.min(0.99, confidence));
+}
+
 export function buildLiveClinicalRulesInput(context: LiveClinicalRulesContext): ClinicalRulesInput | null {
   const rawTranscript = context.transcript.trim();
 
@@ -163,12 +196,14 @@ export function buildLiveClinicalRulesInput(context: LiveClinicalRulesContext): 
   const unexpectedTokens = transcriptTokens.filter((token) => !RULE_TOKEN_WHITELIST.has(token) && parseNumberToken(token) === null);
   const transcriptToothCandidate = extractToothCandidate(rawTranscript);
   const surfaceCandidate = payload?.surface ?? extractSurfaceCandidate(rawTranscript) ?? context.currentSurface ?? undefined;
+  const confidence = context.speechConfidence ?? estimateSpeechConfidence(rawTranscript, unexpectedTokens, payload);
 
   if (hasCommitContent(payload)) {
     return {
       tooth: typeof payload.tooth === 'number' ? payload.tooth : context.currentTooth ?? transcriptToothCandidate ?? undefined,
       surface: surfaceCandidate,
       depth: payload.depth,
+      confidence,
       transcript: rawTranscript,
       normalizedTranscript: payload.normalizedTranscript ?? rawTranscript.toLowerCase(),
       parserAmbiguous: unexpectedTokens.length > 0,
@@ -180,6 +215,7 @@ export function buildLiveClinicalRulesInput(context: LiveClinicalRulesContext): 
     return {
       tooth: transcriptToothCandidate,
       surface: surfaceCandidate,
+      confidence,
       transcript: rawTranscript,
       normalizedTranscript: rawTranscript.toLowerCase(),
       parserAmbiguous: unexpectedTokens.length > 0,

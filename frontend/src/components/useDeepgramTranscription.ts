@@ -6,6 +6,7 @@ const DEFAULT_TRANSCRIPTION_SOCKET_URL = process.env.REACT_APP_TRANSCRIPTION_SOC
 const WORKLET_URL = '/audio-recorder-worklet.js';
 const WORKLET_NAME = 'audio-chunk-processor';
 const MAX_PENDING_CHUNKS = 120;
+const MAX_RECENT_CHUNKS = 120;
 
 type TranscriptMessage = {
   type?: string;
@@ -96,6 +97,7 @@ export function useDeepgramTranscription() {
   const shouldReconnectRef = useRef(false);
   const isStoppingRef = useRef(false);
   const pendingChunksRef = useRef<ArrayBuffer[]>([]);
+  const recentChunksRef = useRef<ArrayBuffer[]>([]);
   const lastFinalTranscriptRef = useRef('');
   const resampleStateRef = useRef<ResampleState>({ buffer: new Float32Array(0), position: 0 });
   const chunkCountRef = useRef(0);
@@ -126,6 +128,8 @@ export function useDeepgramTranscription() {
 
     pendingChunksRef.current = [];
   }, []);
+
+  const getRecentAudioChunks = useCallback(() => recentChunksRef.current.slice(), []);
 
   const pushSegment = useCallback((text: string) => {
     const transcript = text.trim();
@@ -322,6 +326,7 @@ export function useDeepgramTranscription() {
     cleanupAudioGraph();
 
     pendingChunksRef.current = [];
+    recentChunksRef.current = [];
     lastFinalTranscriptRef.current = '';
     resampleStateRef.current = { buffer: new Float32Array(0), position: 0 };
     chunkCountRef.current = 0;
@@ -353,6 +358,7 @@ export function useDeepgramTranscription() {
     setInterimTranscript('');
     lastFinalTranscriptRef.current = '';
     pendingChunksRef.current = [];
+    recentChunksRef.current = [];
     resampleStateRef.current = { buffer: new Float32Array(0), position: 0 };
     chunkCountRef.current = 0;
     sendCountRef.current = 0;
@@ -387,6 +393,12 @@ export function useDeepgramTranscription() {
         const input = rawData instanceof Float32Array ? rawData : new Float32Array(rawData);
         const downsampled = resampleBuffer(input, audioContext.sampleRate, TARGET_SAMPLE_RATE, resampleStateRef.current);
         const pcmChunk = floatTo16BitPCM(downsampled);
+        recentChunksRef.current.push(pcmChunk.slice(0));
+
+        if (recentChunksRef.current.length > MAX_RECENT_CHUNKS) {
+          recentChunksRef.current.shift();
+        }
+
         chunkCountRef.current += 1;
         const socket = socketRef.current;
 
@@ -442,9 +454,10 @@ export function useDeepgramTranscription() {
       isRecording,
       segments,
       socketUrl: DEFAULT_TRANSCRIPTION_SOCKET_URL,
+      getRecentAudioChunks,
       startRecording,
       stopRecording,
     }),
-    [connectionState, error, interimTranscript, isRecording, segments, startRecording, stopRecording]
+    [connectionState, error, getRecentAudioChunks, interimTranscript, isRecording, segments, startRecording, stopRecording]
   );
 }
