@@ -1,6 +1,7 @@
 import type { AiVerificationRecord, ToothState, ToothSurface } from '../types';
+import { apiBaseUrl } from './apiConfig';
 
-const BACKEND_REPORT_ENDPOINT = '/api/generate-report';
+const BACKEND_REPORT_ENDPOINT = `${apiBaseUrl}/api/generate-report`;
 const OXLO_MODEL = 'deepseek-v3.2';
 
 export interface ClinicalReportInput {

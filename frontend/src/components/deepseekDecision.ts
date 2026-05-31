@@ -1,6 +1,7 @@
 import type { ClinicalAttachmentTarget, ClinicalCorrectionContext } from './clinicalContextBuilder';
+import { apiBaseUrl } from './apiConfig';
 
-const BACKEND_DEEPSEEK_ENDPOINT = '/api/deepseek-decision';
+const BACKEND_DEEPSEEK_ENDPOINT = `${apiBaseUrl}/api/deepseek-decision`;
 const OXLO_MODEL = 'deepseek-v3.2';
 
 export interface DeepSeekDecisionInput {

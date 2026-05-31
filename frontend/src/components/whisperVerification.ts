@@ -1,7 +1,8 @@
 import { decideTranscriptWithDeepSeek } from './deepseekDecision';
 import { buildClinicalCorrectionContext, type ClinicalTranscriptHistoryEntry, type ClinicalTripletContext } from './clinicalContextBuilder';
+import { apiBaseUrl } from './apiConfig';
 
-const BACKEND_WHISPER_ENDPOINT = '/api/whisper-verify';
+const BACKEND_WHISPER_ENDPOINT = `${apiBaseUrl}/api/whisper-verify`;
 const OXLO_MODEL = 'whisper-large-v3';
 const WHISPER_SAMPLE_RATE = 16000;
 const WHISPER_CHANNELS = 1;
