@@ -57,6 +57,28 @@ export function isChartComplete(teeth: Record<number, ToothState>): boolean {
   return entries.every((tooth) => tooth.updatedAt > 0 || tooth.missing || tooth.implant);
 }
 
+export function hasMeaningfulChartData(stats: ChartStats): boolean {
+  return (
+    stats.chartedTeeth > 0 &&
+    (
+      stats.bleedingSurfaces > 0 ||
+      stats.healthySurfaces > 0 ||
+      stats.recessionSurfaces > 0 ||
+      stats.pocketCount4Plus > 0 ||
+      stats.missingTeeth > 0 ||
+      stats.implantTeeth > 0
+    )
+  );
+}
+
+export function isReportReady(
+  teeth: Record<number, ToothState>,
+  stats: ChartStats,
+  clinicianReviewComplete = false
+): boolean {
+  return clinicianReviewComplete || isChartComplete(teeth) || stats.chartedTeeth >= 2 || hasMeaningfulChartData(stats);
+}
+
 export function buildChartStats(teeth: Record<number, ToothState>): ChartStats {
   const stats: ChartStats = {
     chartedTeeth: 0,

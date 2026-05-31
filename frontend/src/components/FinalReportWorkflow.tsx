@@ -1,7 +1,7 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { jsPDF } from 'jspdf';
 import { generateClinicalReport, type ClinicalReportOutput } from './reportGeneration';
-import { buildChartStats, buildMeasurementRows, isChartComplete, type ChartStats, type MeasurementRow } from './reportWorkflowUtils';
+import { buildChartStats, buildMeasurementRows, isReportReady, type ChartStats, type MeasurementRow } from './reportWorkflowUtils';
 import { usePerioChart } from './WebSocketProvider';
 
 interface FinalReportWorkflowProps {
@@ -199,47 +199,43 @@ function createPdf(report: ClinicalReportOutput, draft: ReportDraft, stats: Char
 }
 
 export function FinalReportWorkflow({ doctorName }: FinalReportWorkflowProps) {
-  const { teeth, currentTooth, currentSurface, activeSiteIndex, aiVerificationRecords } = usePerioChart();
-  const chartComplete = useMemo(() => isChartComplete(teeth), [teeth]);
+  const { teeth, currentTooth, currentSurface, activeSiteIndex, aiVerificationRecords, transcripts } = usePerioChart();
   const chartStats = useMemo(() => buildChartStats(teeth), [teeth]);
   const measurements = useMemo(() => buildMeasurementRows(teeth), [teeth]);
+  const reportReady = useMemo(() => isReportReady(teeth, chartStats), [chartStats, teeth]);
   const reportInput = useMemo(
     () => buildReportInput(teeth, currentTooth, currentSurface, activeSiteIndex, aiVerificationRecords),
     [activeSiteIndex, aiVerificationRecords, currentSurface, currentTooth, teeth]
   );
 
-  const [promptVisible, setPromptVisible] = useState(false);
   const [panelOpen, setPanelOpen] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isSummarizing, setIsSummarizing] = useState(false);
   const [reportError, setReportError] = useState<string | null>(null);
   const [report, setReport] = useState<ClinicalReportOutput | null>(null);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [draft, setDraft] = useState<ReportDraft>({
     diagnosis: '',
     treatment: '',
     doctorNotes: '',
   });
-  const promptLoggedRef = useRef(false);
+  const lastVoiceCommandIdRef = useRef<string | null>(null);
+  const toastTimerRef = useRef<number | null>(null);
 
-  useEffect(() => {
-    if (!chartComplete) {
-      promptLoggedRef.current = false;
-      setPromptVisible(false);
-      return;
+  const showToast = useCallback((message: string) => {
+    setToastMessage(message);
+
+    if (toastTimerRef.current !== null) {
+      window.clearTimeout(toastTimerRef.current);
     }
 
-    if (!panelOpen && !promptLoggedRef.current) {
-      promptLoggedRef.current = true;
-      setPromptVisible(true);
-      console.info('REPORT_POPUP', {
-        chartedTeeth: chartStats.chartedTeeth,
-        missingTeeth: chartStats.missingTeeth,
-        implantTeeth: chartStats.implantTeeth,
-      });
-    }
-  }, [chartComplete, chartStats.chartedTeeth, chartStats.implantTeeth, chartStats.missingTeeth, panelOpen]);
+    toastTimerRef.current = window.setTimeout(() => {
+      setToastMessage(null);
+      toastTimerRef.current = null;
+    }, 2500);
+  }, []);
 
-  const loadReport = async () => {
+  const loadReport = useCallback(async () => {
     setIsGenerating(true);
     setReportError(null);
 
@@ -256,11 +252,14 @@ export function FinalReportWorkflow({ doctorName }: FinalReportWorkflowProps) {
     } finally {
       setIsGenerating(false);
     }
-  };
+  }, [reportInput]);
 
-  const openPanel = async () => {
+  const openPanel = useCallback(async () => {
+    if (!reportReady) {
+      showToast('Complete charting before generating report.');
+      return;
+    }
     setPanelOpen(true);
-    setPromptVisible(false);
     console.info('REPORT_PANEL_OPEN', {
       chartedTeeth: chartStats.chartedTeeth,
       missingTeeth: chartStats.missingTeeth,
@@ -270,11 +269,39 @@ export function FinalReportWorkflow({ doctorName }: FinalReportWorkflowProps) {
     if (!report) {
       await loadReport();
     }
-  };
+  }, [chartStats.chartedTeeth, chartStats.implantTeeth, chartStats.missingTeeth, loadReport, report, reportReady, showToast]);
 
-  const handlePromptDismiss = () => {
-    setPromptVisible(false);
-  };
+  useEffect(() => {
+    const latestVoiceCommand = transcripts.find((entry) => {
+      if (!entry.isFinal || !entry.text.trim()) {
+        return false;
+      }
+
+      if (lastVoiceCommandIdRef.current === entry.id) {
+        return false;
+      }
+
+      return /\bgenerate report\b/i.test(entry.text);
+    });
+
+    if (!latestVoiceCommand) {
+      return;
+    }
+
+    lastVoiceCommandIdRef.current = latestVoiceCommand.id;
+    console.info('REPORT_COMMAND_DETECTED', {
+      source: latestVoiceCommand.source,
+      transcript: latestVoiceCommand.text.trim(),
+      chartReady: reportReady,
+    });
+
+    if (!reportReady) {
+      showToast('Complete charting before generating report.');
+      return;
+    }
+
+    void openPanel();
+  }, [openPanel, reportReady, showToast, transcripts]);
 
   const handleEdit = (field: keyof ReportDraft, value: string) => {
     setDraft((previous) => ({
@@ -320,6 +347,24 @@ export function FinalReportWorkflow({ doctorName }: FinalReportWorkflowProps) {
     createPdf(report, draft, chartStats, measurements, doctorName);
   };
 
+  useEffect(() => {
+    if (!panelOpen) {
+      return;
+    }
+
+    console.info('REPORT_UI_RENDERED', {
+      hasReport: Boolean(report),
+      isGenerating,
+      isSummarizing,
+    });
+  }, [isGenerating, isSummarizing, panelOpen, report]);
+
+  useEffect(() => () => {
+    if (toastTimerRef.current !== null) {
+      window.clearTimeout(toastTimerRef.current);
+    }
+  }, []);
+
   const toothRows = [
     { label: 'Maxillary', teeth: MAXILLARY_ROW },
     { label: 'Mandibular', teeth: MANDIBULAR_ROW },
@@ -327,31 +372,26 @@ export function FinalReportWorkflow({ doctorName }: FinalReportWorkflowProps) {
 
   return (
     <>
-      {promptVisible ? (
-        <div className="fixed bottom-6 right-6 z-50 w-[min(92vw,420px)] rounded-[28px] border border-cyan-200 bg-white/95 p-4 shadow-[0_24px_60px_rgba(15,23,42,0.18)] backdrop-blur">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.32em] text-cyan-700">Chart complete</p>
-          <h2 className="mt-2 text-lg font-semibold tracking-tight text-slate-950">Generate AI Report?</h2>
-          <p className="mt-2 text-sm leading-6 text-slate-600">Review the chart, edit the AI draft, then download the final report as a PDF.</p>
-          <div className="mt-4 flex items-center justify-end gap-3">
-            <button
-              type="button"
-              onClick={handlePromptDismiss}
-              className="rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-semibold uppercase tracking-[0.22em] text-slate-600 transition hover:bg-slate-50"
-            >
-              Not now
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                void openPanel();
-              }}
-              className="rounded-full border border-cyan-700 bg-cyan-700 px-4 py-2 text-xs font-semibold uppercase tracking-[0.22em] text-white transition hover:bg-cyan-800"
-            >
-              Generate Report
-            </button>
+      <div className="fixed bottom-6 right-6 z-50 flex flex-col items-end gap-3">
+        {toastMessage ? (
+          <div className="max-w-[320px] rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-medium text-rose-800 shadow-lg">
+            {toastMessage}
           </div>
+        ) : null}
+
+        <div title={reportReady ? 'Generate report' : 'Complete charting to generate report'}>
+          <button
+            type="button"
+            onClick={() => {
+              void openPanel();
+            }}
+            disabled={!reportReady}
+            className="rounded-full border border-cyan-700 bg-cyan-700 px-5 py-3 text-xs font-semibold uppercase tracking-[0.24em] text-white shadow-[0_14px_30px_rgba(8,145,178,0.32)] transition hover:bg-cyan-800 disabled:cursor-not-allowed disabled:border-slate-300 disabled:bg-slate-200 disabled:text-slate-500 disabled:shadow-none"
+          >
+            Generate Report
+          </button>
         </div>
-      ) : null}
+      </div>
 
       {panelOpen ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/55 px-4 py-6 backdrop-blur-sm">

@@ -71,6 +71,11 @@ const CLINICAL_KEYWORDS = new Set([
   'bleeding',
   'missing',
   'implant',
+  'healthy',
+  'recession',
+  'mobility',
+  'furcation',
+  'exudate',
   'undo',
   'next',
   'previous',
@@ -553,6 +558,7 @@ export function parseTranscriptToPayload(transcript: string, context?: Transcrip
     missing ||
     implant ||
     healthy ||
+    recession !== undefined ||
     surface !== undefined ||
     siteIndex !== undefined;
   const awaitingAdditionalFindings = toothCommitPending && !explicitAdvance;
@@ -585,6 +591,7 @@ export function parseTranscriptToPayload(transcript: string, context?: Transcrip
     depth === undefined &&
     surface === undefined &&
     siteIndex === undefined &&
+    recession === undefined &&
     !bleeding &&
     !missing &&
     !implant &&

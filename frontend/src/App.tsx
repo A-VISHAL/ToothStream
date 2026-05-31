@@ -5,6 +5,7 @@ import { ClinicalOverviewPage } from './components/ClinicalOverviewPage';
 import { PatientEntryPage, type PatientProfile } from './components/PatientEntryPage';
 import { PerioChart } from './components/PerioChart';
 import { DebugPanel } from './components/DebugPanel';
+import { FinalReportWorkflow } from './components/FinalReportWorkflow';
 import { StatusBar } from './components/StatusBar';
 import { TranscriptPanel } from './components/TranscriptPanel';
 import { WebSocketProvider, usePerioChart } from './components/WebSocketProvider';
@@ -162,6 +163,7 @@ function Dashboard({ doctorName, patient }: { doctorName: string; patient: Patie
         </main>
       </div>
 
+      <FinalReportWorkflow doctorName={doctorName} />
       <DebugPanel />
     </div>
   );

@@ -1,4 +1,4 @@
-import { buildChartStats, buildMeasurementRows, isChartComplete } from './reportWorkflowUtils';
+import { buildChartStats, buildMeasurementRows, isChartComplete, isReportReady } from './reportWorkflowUtils';
 import type { ToothState } from '../types';
 
 function createToothState(overrides: Partial<ToothState> = {}): ToothState {
@@ -37,6 +37,36 @@ describe('reportWorkflowUtils', () => {
     ) as Record<number, ToothState>;
 
     expect(isChartComplete(teeth)).toBe(true);
+  });
+
+  it('enables reporting when there is meaningful chart data on multiple teeth', () => {
+    const teeth: Record<number, ToothState> = {
+      14: createToothState({
+        toothNumber: 14,
+        updatedAt: 1,
+        buccal: {
+          depth: [3, 5, 7],
+          bleeding: true,
+          healthy: false,
+          recession: 2,
+          siteIndex: 1,
+          updatedAt: 1,
+        },
+        lingual: {
+          depth: [2, 4, 5],
+          bleeding: false,
+          healthy: true,
+          recession: false,
+          siteIndex: 1,
+          updatedAt: 1,
+        },
+      }),
+      15: createToothState({ toothNumber: 15, updatedAt: 1 }),
+    };
+
+    const stats = buildChartStats(teeth);
+
+    expect(isReportReady(teeth, stats)).toBe(true);
   });
 
   it('counts chart statistics and formats locked measurement rows', () => {

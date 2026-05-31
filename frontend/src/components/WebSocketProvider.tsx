@@ -509,12 +509,32 @@ function ingestPayload(
         tooth: commitToothNumber,
         surface,
       });
+      console.info('FINDING_COMMIT', {
+        finding: 'implant',
+        tooth: commitToothNumber,
+        surface,
+      });
+      console.info('FINDING_SOUND_TRIGGER', {
+        finding: 'implant',
+        sound: 'acknowledgment',
+        trigger: 'manual',
+      });
       triggerClinicalSound('acknowledgment', 'manual', 'implant attach');
     } else if (hydrated.implant === false) {
       nextTooth.implant = false;
     }
 
     if (hydrated.healthy === true) {
+      console.info('FINDING_COMMIT', {
+        finding: 'healthy',
+        tooth: commitToothNumber,
+        surface,
+      });
+      console.info('FINDING_SOUND_TRIGGER', {
+        finding: 'healthy',
+        sound: 'acknowledgment',
+        trigger: 'manual',
+      });
       nextTooth[surface] = {
         ...nextTooth[surface],
         healthy: true,
@@ -539,6 +559,11 @@ function ingestPayload(
         healthy: false,
         updatedAt: receivedAt,
       };
+      console.info('FINDING_COMMIT', {
+        finding: 'bleeding',
+        tooth: commitToothNumber,
+        surface,
+      });
     }
 
     if (hydrated.recession !== undefined) {
@@ -551,6 +576,17 @@ function ingestPayload(
         tooth: commitToothNumber,
         surface,
         recession: hydrated.recession,
+      });
+      console.info('FINDING_COMMIT', {
+        finding: 'recession',
+        tooth: commitToothNumber,
+        surface,
+        recession: hydrated.recession,
+      });
+      console.info('FINDING_SOUND_TRIGGER', {
+        finding: 'recession',
+        sound: 'commit',
+        trigger: 'manual',
       });
       triggerClinicalSound('commit', 'manual', 'recession commit');
       console.info('RECESSION_RENDER', {
@@ -648,6 +684,14 @@ function ingestPayload(
         siteIndex,
         depth: nextTooth[surface].depth,
       });
+      console.info('FINDING_COMMIT', {
+        tooth: commitToothNumber,
+        surface,
+        bleeding: nextTooth[surface].bleeding,
+        healthy: nextTooth[surface].healthy,
+        recession: nextTooth[surface].recession,
+        implant: nextTooth.implant,
+      });
       console.info('[Perio UI] commit complete', {
         implant: nextTooth.implant,
         cursorBefore: {
@@ -676,6 +720,11 @@ function ingestPayload(
 
   if (hydrated.bleeding) {
     flashFeedback({ kind: 'bleeding', message: 'BLEEDING SET' });
+    console.info('FINDING_SOUND_TRIGGER', {
+      finding: 'bleeding',
+      sound: 'bleeding',
+      trigger: 'bleeding_true',
+    });
     playSound('bleeding', 'bleeding_true');
   }
 
@@ -992,6 +1041,13 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
       action: speechFilter.shouldProcess ? 'processed' : 'ignored_non_clinical',
       reason: speechFilter.reason,
     });
+    if (speechFilter.shouldProcess && /\b(recession|recessed|bleeding|bleed(?:ing)?|implant|healthy|mobility|furcation|exudate)\b/i.test(latestFinal.text)) {
+      console.info('CLINICAL_FINDING_DETECTED', {
+        transcript: latestFinal.text.trim(),
+        intent: speechFilter.intent,
+        reason: speechFilter.reason,
+      });
+    }
     pushDebugTimeline(
       'parser',
       speechFilter.shouldProcess ? 'clinical intent detected' : 'ignored_non_clinical',
