@@ -2,7 +2,26 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { TranscriptEntry, LiveTranscriptState } from '../types';
 
 const TARGET_SAMPLE_RATE = 16000;
-const DEFAULT_TRANSCRIPTION_SOCKET_URL = process.env.REACT_APP_TRANSCRIPTION_SOCKET_URL || 'ws://localhost:8000/ws/audio';
+
+function resolveWsUrl(): string {
+  const url =
+    process.env.REACT_APP_WS_URL ||
+    process.env.REACT_APP_TRANSCRIPTION_SOCKET_URL ||
+    'ws://localhost:8000/ws/audio';
+
+  console.info('WS_URL_SELECTED', {
+    url,
+    source: process.env.REACT_APP_WS_URL
+      ? 'REACT_APP_WS_URL'
+      : process.env.REACT_APP_TRANSCRIPTION_SOCKET_URL
+        ? 'REACT_APP_TRANSCRIPTION_SOCKET_URL'
+        : 'fallback_localhost',
+  });
+
+  return url;
+}
+
+const DEFAULT_TRANSCRIPTION_SOCKET_URL = resolveWsUrl();
 const WORKLET_URL = '/audio-recorder-worklet.js';
 const WORKLET_NAME = 'audio-chunk-processor';
 const MAX_PENDING_CHUNKS = 120;
