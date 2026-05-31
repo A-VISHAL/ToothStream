@@ -1,22 +1,7 @@
 import type { ClinicalAttachmentTarget, ClinicalCorrectionContext } from './clinicalContextBuilder';
 
-const OXLO_CHAT_ENDPOINT = 'https://api.oxlo.ai/v1/chat/completions';
+const BACKEND_DEEPSEEK_ENDPOINT = '/api/deepseek-decision';
 const OXLO_MODEL = 'deepseek-v3.2';
-
-function resolveOxloApiKey(): string | undefined {
-  const reactAppKey = process.env.REACT_APP_OXLO_API_KEY;
-  const viteKey = process.env.VITE_OXLO_API_KEY;
-
-  if (reactAppKey) {
-    return reactAppKey;
-  }
-
-  if (viteKey) {
-    return viteKey;
-  }
-
-  return undefined;
-}
 
 export interface DeepSeekDecisionInput {
   deepgramTranscript: string;
@@ -228,17 +213,10 @@ function normalizeTermCorrections(value: unknown): TermCorrection[] {
 }
 
 async function attemptDeepSeekRequest(
-  apiKey: string,
   input: DeepSeekDecisionInput
 ): Promise<DeepSeekAttemptSuccess> {
-  console.info('DEEPSEEK_AUTH_CHECK', {
-    keyPresent: Boolean(apiKey),
-    keyLength: apiKey.length,
-    modelName: OXLO_MODEL,
-  });
-
   console.info('DEEPSEEK_REQUEST_START', {
-    endpoint: OXLO_CHAT_ENDPOINT,
+    endpoint: BACKEND_DEEPSEEK_ENDPOINT,
     modelName: OXLO_MODEL,
     deepgramTranscript: input.deepgramTranscript,
     whisperTranscript: input.whisperTranscript,
@@ -259,49 +237,25 @@ async function attemptDeepSeekRequest(
     knownDentalTerms: input.clinicalContext?.knownDentalTerms ?? [],
   });
 
-  const response = await fetch(OXLO_CHAT_ENDPOINT, {
+  const response = await fetch(BACKEND_DEEPSEEK_ENDPOINT, {
     method: 'POST',
     headers: {
-      Authorization: `Bearer ${apiKey}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({
-      model: OXLO_MODEL,
-      temperature: 0,
-      messages: [
-        {
-          role: 'system',
-          content: 'You are a clinical transcript decision engine for periodontal dictation. Return strict JSON only.',
-        },
-        {
-          role: 'user',
-          content: buildDecisionPrompt(input),
-        },
-      ],
-    }),
+    body: JSON.stringify({ prompt: buildDecisionPrompt(input) }),
   });
 
-  console.info('DEEPSEEK_RESPONSE', {
-    ok: response.ok,
-    status: response.status,
-    modelName: OXLO_MODEL,
-  });
+  console.info('DEEPSEEK_RESPONSE', { ok: response.ok, status: response.status, modelName: OXLO_MODEL });
 
   if (!response.ok) {
     const responseBodyText = await response.text();
-    console.info('DEEPSEEK_MODEL_ACCESS', {
-      modelName: OXLO_MODEL,
-      status: response.status,
-      responseBodyText,
-    });
-
-    throw new Error(`DeepSeek request failed with status ${response.status}`);
+    console.info('DEEPSEEK_MODEL_ACCESS', { modelName: OXLO_MODEL, status: response.status, responseBodyText });
+    throw new Error(`DeepSeek proxy failed with status ${response.status}`);
   }
 
-  return {
-    responseBody: (await response.json()) as unknown,
-    modelName: OXLO_MODEL,
-  };
+  const body = await response.json();
+  // backend returns { response: <oxlo response> }
+  return { responseBody: body.response, modelName: OXLO_MODEL };
 }
 
 function normalizeDecisionResult(
@@ -366,21 +320,8 @@ export async function decideTranscriptWithDeepSeek(
     contextAttachment: input.clinicalContext?.recommendedAttachment ?? null,
   });
 
-  const apiKey = resolveOxloApiKey();
-
-  if (!apiKey) {
-    const fallback = buildNoDecision('missing_oxlo_api_key');
-    console.info('DEEPSEEK_FALLBACK', {
-      reason: fallback.reasoning,
-      deepgramTranscript: input.deepgramTranscript,
-      whisperTranscript: input.whisperTranscript,
-    });
-    console.info('NO_DECISION', fallback);
-    return fallback;
-  }
-
   try {
-    const attempt = await attemptDeepSeekRequest(apiKey, input);
+    const attempt = await attemptDeepSeekRequest(input);
     const content = extractChatContent(attempt.responseBody);
     const parsed = extractJsonObject(content);
     const result = normalizeDecisionResult(parsed, input, 'invalid_deepseek_response');

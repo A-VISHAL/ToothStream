@@ -1,22 +1,7 @@
 import type { AiVerificationRecord, ToothState, ToothSurface } from '../types';
 
-const OXLO_CHAT_ENDPOINT = 'https://api.oxlo.ai/v1/chat/completions';
+const BACKEND_REPORT_ENDPOINT = '/api/generate-report';
 const OXLO_MODEL = 'deepseek-v3.2';
-
-function resolveOxloApiKey(): string | undefined {
-  const reactAppKey = process.env.REACT_APP_OXLO_API_KEY;
-  const viteKey = process.env.VITE_OXLO_API_KEY;
-
-  if (reactAppKey) {
-    return reactAppKey;
-  }
-
-  if (viteKey) {
-    return viteKey;
-  }
-
-  return undefined;
-}
 
 export interface ClinicalReportInput {
   teeth?: Record<number, ToothState>;
@@ -763,19 +748,11 @@ export async function generateClinicalReport(input: ClinicalReportInput): Promis
     evidenceMode: hasDirectChartEvidence(input) ? 'direct' : 'legacy',
   });
 
-  const apiKey = resolveOxloApiKey();
-
-  if (!apiKey) {
-    console.info('REPORT_FALLBACK', {
-      reason: 'missing_oxlo_api_key',
-      summary: fallbackReport.summary,
-    });
-    return fallbackReport;
-  }
+  console.info('REPORT_PROXY', { endpoint: BACKEND_REPORT_ENDPOINT });
 
   try {
     console.info('REPORT_REQUEST_START', {
-      endpoint: OXLO_CHAT_ENDPOINT,
+      endpoint: BACKEND_REPORT_ENDPOINT,
       modelName: OXLO_MODEL,
       pocketCount5Plus: evidence.pocketCount5Plus,
       pocketCount7Plus: evidence.pocketCount7Plus,
@@ -786,39 +763,22 @@ export async function generateClinicalReport(input: ClinicalReportInput): Promis
       aiVerificationRecords: evidence.aiVerificationRecords.length,
     });
 
-    const response = await fetch(OXLO_CHAT_ENDPOINT, {
+    const response = await fetch(BACKEND_REPORT_ENDPOINT, {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        model: OXLO_MODEL,
-        temperature: 0,
-        messages: [
-          {
-            role: 'system',
-            content: 'You generate concise periodontal reports from chart evidence only. Return strict JSON only.',
-          },
-          {
-            role: 'user',
-            content: buildEvidencePrompt(evidence, input),
-          },
-        ],
-      }),
+      body: JSON.stringify({ prompt: buildEvidencePrompt(evidence, input) }),
     });
 
-    console.info('REPORT_RESPONSE', {
-      ok: response.ok,
-      status: response.status,
-      modelName: OXLO_MODEL,
-    });
+    console.info('REPORT_RESPONSE', { ok: response.ok, status: response.status, modelName: OXLO_MODEL });
 
     if (!response.ok) {
-      throw new Error(`Report request failed with status ${response.status}`);
+      throw new Error(`Report proxy failed with status ${response.status}`);
     }
 
-    const responseBody = (await response.json()) as unknown;
+    const responseBodyWrapper = (await response.json()) as any;
+    const responseBody = responseBodyWrapper?.response ?? responseBodyWrapper;
     const content = extractChatContent(responseBody);
     const parsed = extractJsonObject(content);
     const normalized = normalizeReportResult(parsed, fallbackReport);

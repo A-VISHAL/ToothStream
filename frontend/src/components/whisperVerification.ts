@@ -1,25 +1,10 @@
 import { decideTranscriptWithDeepSeek } from './deepseekDecision';
 import { buildClinicalCorrectionContext, type ClinicalTranscriptHistoryEntry, type ClinicalTripletContext } from './clinicalContextBuilder';
 
-const OXLO_WHISPER_ENDPOINT = 'https://api.oxlo.ai/v1/audio/transcriptions';
+const BACKEND_WHISPER_ENDPOINT = '/api/whisper-verify';
 const OXLO_MODEL = 'whisper-large-v3';
 const WHISPER_SAMPLE_RATE = 16000;
 const WHISPER_CHANNELS = 1;
-
-function resolveOxloApiKey(): string | undefined {
-  const reactAppKey = process.env.REACT_APP_OXLO_API_KEY;
-  const viteKey = process.env.VITE_OXLO_API_KEY;
-
-  if (reactAppKey) {
-    return reactAppKey;
-  }
-
-  if (viteKey) {
-    return viteKey;
-  }
-
-  return undefined;
-}
 
 export interface WhisperVerificationInput {
   audioChunks: ArrayBuffer[];
@@ -135,20 +120,7 @@ function extractTranscriptFromResponse(responseBody: unknown): string {
 export async function verifySuspiciousTranscriptWithWhisper(
   input: WhisperVerificationInput
 ): Promise<WhisperVerificationResult> {
-  const apiKey = resolveOxloApiKey();
-
-  console.info('WHISPER_AUTH_CHECK', {
-    keyPresent: Boolean(apiKey),
-    keyLength: apiKey?.length ?? 0,
-    envName: process.env.REACT_APP_OXLO_API_KEY ? 'REACT_APP_OXLO_API_KEY' : process.env.VITE_OXLO_API_KEY ? 'VITE_OXLO_API_KEY' : 'missing',
-  });
-
-  if (!apiKey) {
-    console.info('WHISPER_ENV_MISSING', {
-      expectedEnvNames: ['REACT_APP_OXLO_API_KEY', 'VITE_OXLO_API_KEY'],
-      runtime: 'browser',
-    });
-  }
+  console.info('WHISPER_AUTH_CHECK', { usingBackendProxy: true });
 
   console.info('WHISPER_TRIGGERED', {
     originalTranscript: input.originalTranscript,
@@ -178,8 +150,9 @@ export async function verifySuspiciousTranscriptWithWhisper(
   }
 
   try {
+
     console.info('WHISPER_REQUEST_START', {
-      endpoint: OXLO_WHISPER_ENDPOINT,
+      endpoint: BACKEND_WHISPER_ENDPOINT,
       model: OXLO_MODEL,
       originalTranscript: input.originalTranscript,
       suspiciousReasons: input.suspiciousReasons,
@@ -191,19 +164,12 @@ export async function verifySuspiciousTranscriptWithWhisper(
     });
 
     const formData = new FormData();
-    formData.append('model', OXLO_MODEL);
-    formData.append('language', 'en');
+    formData.append('originalTranscript', input.originalTranscript);
+    formData.append('suspiciousReasons', JSON.stringify(input.suspiciousReasons || []));
     formData.append('file', audioBlob, 'suspicious-audio.wav');
 
-    const headers: HeadersInit = {};
-
-    if (apiKey) {
-      headers.Authorization = `Bearer ${apiKey}`;
-    }
-
-    const response = await fetch(OXLO_WHISPER_ENDPOINT, {
+    const response = await fetch(BACKEND_WHISPER_ENDPOINT, {
       method: 'POST',
-      headers,
       body: formData,
     });
 
@@ -213,11 +179,13 @@ export async function verifySuspiciousTranscriptWithWhisper(
     });
 
     if (!response.ok) {
-      throw new Error(`Whisper request failed with status ${response.status}`);
+      throw new Error(`Whisper proxy failed with status ${response.status}`);
     }
 
     const responseBody = (await response.json()) as unknown;
-    const whisperTranscript = extractTranscriptFromResponse(responseBody).trim();
+    // backend returns { whisperTranscript, confidence, status }
+    const whisperTranscript = (responseBody && typeof responseBody === 'object' && (responseBody as any).whisperTranscript) ? String((responseBody as any).whisperTranscript).trim() : '';
+    const confidence = (responseBody && typeof responseBody === 'object' && typeof (responseBody as any).confidence === 'number') ? (responseBody as any).confidence : 0;
 
     console.info('WHISPER_TRANSCRIPT', {
       whisperTranscript,
