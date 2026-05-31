@@ -1,3 +1,5 @@
+import type { ClinicalAttachmentTarget, ClinicalCorrectionContext } from './clinicalContextBuilder';
+
 const OXLO_CHAT_ENDPOINT = 'https://api.oxlo.ai/v1/chat/completions';
 const OXLO_MODEL = 'deepseek-v3.2';
 
@@ -22,6 +24,13 @@ export interface DeepSeekDecisionInput {
   suspiciousReasons: string[];
   toothContext?: string | number | null;
   surfaceContext?: string | null;
+  clinicalContext?: ClinicalCorrectionContext | null;
+}
+
+export interface TermCorrection {
+  from: string;
+  to: string;
+  reason: string;
 }
 
 export interface DeepSeekDecisionResult {
@@ -30,6 +39,8 @@ export interface DeepSeekDecisionResult {
   reasoning: string;
   aiVerified: boolean;
   decision: 'whisper' | 'deepgram' | 'no_decision';
+  attachmentTarget: ClinicalAttachmentTarget;
+  correctedTerms: TermCorrection[];
 }
 
 interface DeepSeekAttemptSuccess {
@@ -122,9 +133,13 @@ function extractJsonObject(content: string): unknown {
 }
 
 function buildDecisionPrompt(input: DeepSeekDecisionInput): string {
+  const context = input.clinicalContext;
+
   return [
     'Choose clinically likely periodontal dictation only.',
     'Do not hallucinate any words that are not supported by the transcripts.',
+    'Do not perform generic spelling correction.',
+    'Use dental context, suspicious reasons, transcript history, parsed findings, and known dental terms.',
     'If Deepgram and Whisper both look uncertain, return no_decision.',
     'Prefer the whisper transcript when it agrees with the clinical reasons.',
     'Prefer the Deepgram transcript when it is realistic and Whisper appears uncertain.',
@@ -134,6 +149,20 @@ function buildDecisionPrompt(input: DeepSeekDecisionInput): string {
     `Clinical reasons: ${input.suspiciousReasons.join('; ') || 'none'}`,
     `Tooth context: ${input.toothContext ?? 'unknown'}`,
     `Surface context: ${input.surfaceContext ?? 'unknown'}`,
+    context
+      ? `Clinical workflow context: ${JSON.stringify({
+          currentTooth: context.currentTooth,
+          lastCommittedTooth: context.lastCommittedTooth,
+          currentSurface: context.currentSurface,
+          lastTripletContext: context.lastTripletContext,
+          recentTranscriptHistory: context.recentTranscriptHistory,
+          suspiciousReasons: context.suspiciousReasons,
+          parsedFindings: context.parsedFindings,
+          knownDentalTerms: context.knownDentalTerms,
+          termCorrectionHints: context.termCorrectionHints,
+          recommendedAttachment: context.recommendedAttachment,
+        })}`
+      : 'Clinical workflow context: none',
     '',
     'Return strict JSON with these keys only:',
     '{',
@@ -141,7 +170,9 @@ function buildDecisionPrompt(input: DeepSeekDecisionInput): string {
     '  "confidence": number,',
     '  "reasoning": string,',
     '  "aiVerified": boolean,',
-    '  "decision": "whisper" | "deepgram" | "no_decision"',
+    '  "decision": "whisper" | "deepgram" | "no_decision",',
+    '  "attachmentTarget": "current_tooth" | "last_committed_tooth" | "current_surface" | "none",',
+    '  "correctedTerms": [{ "from": string, "to": string, "reason": string }]',
     '}',
   ].join('\n');
 }
@@ -153,7 +184,47 @@ function buildNoDecision(reasoning: string): DeepSeekDecisionResult {
     reasoning,
     aiVerified: false,
     decision: 'no_decision',
+    attachmentTarget: 'none',
+    correctedTerms: [],
   };
+}
+
+function resolveAttachmentTarget(input: DeepSeekDecisionInput, candidate: unknown): ClinicalAttachmentTarget {
+  if (
+    candidate === 'current_tooth' ||
+    candidate === 'last_committed_tooth' ||
+    candidate === 'current_surface' ||
+    candidate === 'none'
+  ) {
+    return candidate;
+  }
+
+  return input.clinicalContext?.recommendedAttachment.target ?? 'none';
+}
+
+function normalizeTermCorrections(value: unknown): TermCorrection[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .map((entry) => {
+      if (!entry || typeof entry !== 'object') {
+        return null;
+      }
+
+      const record = entry as Record<string, unknown>;
+      const from = typeof record.from === 'string' ? record.from.trim() : '';
+      const to = typeof record.to === 'string' ? record.to.trim() : '';
+      const reason = typeof record.reason === 'string' ? record.reason.trim() : 'contextual correction';
+
+      if (!from || !to) {
+        return null;
+      }
+
+      return { from, to, reason };
+    })
+    .filter((entry): entry is TermCorrection => Boolean(entry));
 }
 
 async function attemptDeepSeekRequest(
@@ -174,6 +245,18 @@ async function attemptDeepSeekRequest(
     suspiciousReasons: input.suspiciousReasons,
     toothContext: input.toothContext ?? null,
     surfaceContext: input.surfaceContext ?? null,
+    contextAttachment: input.clinicalContext?.recommendedAttachment ?? null,
+  });
+
+  console.info('DEEPSEEK_CONTEXT_REQUEST', {
+    currentTooth: input.clinicalContext?.currentTooth ?? null,
+    lastCommittedTooth: input.clinicalContext?.lastCommittedTooth ?? null,
+    currentSurface: input.clinicalContext?.currentSurface ?? null,
+    lastTripletContext: input.clinicalContext?.lastTripletContext ?? null,
+    recentTranscriptHistory: input.clinicalContext?.recentTranscriptHistory ?? [],
+    suspiciousReasons: input.suspiciousReasons,
+    parsedFindings: input.clinicalContext?.parsedFindings ?? [],
+    knownDentalTerms: input.clinicalContext?.knownDentalTerms ?? [],
   });
 
   const response = await fetch(OXLO_CHAT_ENDPOINT, {
@@ -240,9 +323,24 @@ function normalizeDecisionResult(
     ? record.decision
     : 'no_decision';
   const aiVerified = record.aiVerified === true;
+  const attachmentTarget = resolveAttachmentTarget(input, record.attachmentTarget);
+  const correctedTerms = normalizeTermCorrections(record.correctedTerms);
+
+  if (correctedTerms.length > 0) {
+    console.info('TERM_CORRECTION', correctedTerms);
+  }
+
+  console.info('CONTEXTUAL_ATTACH', {
+    target: attachmentTarget,
+    recommended: input.clinicalContext?.recommendedAttachment ?? null,
+  });
 
   if (decision === 'no_decision' || !correctedTranscript || correctedTranscript === 'no_decision' || !aiVerified) {
-    return buildNoDecision(reasoning || fallbackReasoning);
+    return {
+      ...buildNoDecision(reasoning || fallbackReasoning),
+      attachmentTarget,
+      correctedTerms,
+    };
   }
 
   return {
@@ -251,6 +349,8 @@ function normalizeDecisionResult(
     reasoning,
     aiVerified: true,
     decision,
+    attachmentTarget,
+    correctedTerms,
   };
 }
 
@@ -263,6 +363,7 @@ export async function decideTranscriptWithDeepSeek(
     suspiciousReasons: input.suspiciousReasons,
     toothContext: input.toothContext ?? null,
     surfaceContext: input.surfaceContext ?? null,
+    contextAttachment: input.clinicalContext?.recommendedAttachment ?? null,
   });
 
   const apiKey = resolveOxloApiKey();

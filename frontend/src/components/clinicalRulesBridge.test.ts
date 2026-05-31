@@ -62,4 +62,23 @@ describe('buildLiveClinicalRulesInput', () => {
 
     expect(result).toBeNull();
   });
+
+  it.each([
+    ['resolution two', 'recession'],
+    ['vacation one', 'furcation'],
+    ['inter proximal', 'interproximal'],
+  ])('routes modifier ambiguity transcript %s', (transcript, expectedCanonical) => {
+    const result = buildLiveClinicalRulesInput({
+      transcript,
+      payload: null,
+      currentTooth: 14,
+      currentSurface: 'buccal',
+    });
+
+    expect(result).not.toBeNull();
+    expect(result?.parserAmbiguous).toBe(true);
+    expect(result?.unexpectedTokens).toBeDefined();
+    expect(result?.normalizedTranscript).toContain(expectedCanonical);
+    expect(result?.transcript).toBe(transcript);
+  });
 });

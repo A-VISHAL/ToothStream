@@ -48,6 +48,31 @@ describe('decideTranscriptWithDeepSeek', () => {
       suspiciousReasons: ['suspicious_number_pattern'],
       toothContext: 19,
       surfaceContext: 'buccal',
+      clinicalContext: {
+        currentTooth: 19,
+        lastCommittedTooth: 18,
+        currentSurface: 'buccal',
+        lastTripletContext: {
+          tooth: 18,
+          surface: 'buccal',
+          siteIndex: 1,
+          depth: [3, 2, 3],
+        },
+        recentTranscriptHistory: [
+          { text: '323', timestamp: 1, source: 'deepgram' },
+          { text: 'bleeding', timestamp: 2, source: 'deepgram' },
+        ],
+        suspiciousReasons: ['suspicious_number_pattern'],
+        parsedFindings: ['bleeding'],
+        knownDentalTerms: ['recession', 'furcation', 'bleeding'],
+        termCorrectionHints: [
+          { from: 'resolution', to: 'recession', reason: 'phonetic mismatch' },
+        ],
+        recommendedAttachment: {
+          target: 'last_committed_tooth',
+          reason: 'modifier should attach to previous tooth',
+        },
+      },
     });
 
     expect(fetchSpy).toHaveBeenCalledTimes(1);
@@ -56,6 +81,7 @@ describe('decideTranscriptWithDeepSeek', () => {
         correctedTranscript: 'lower left three three two',
         aiVerified: true,
         decision: 'deepgram',
+        attachmentTarget: 'last_committed_tooth',
       })
     );
     expect(fetchSpy).toHaveBeenCalledTimes(1);
@@ -71,6 +97,13 @@ describe('decideTranscriptWithDeepSeek', () => {
       'DEEPSEEK_REQUEST_START',
       expect.objectContaining({
         modelName: 'deepseek-v3.2',
+      })
+    );
+    expect(infoSpy).toHaveBeenCalledWith(
+      'DEEPSEEK_CONTEXT_REQUEST',
+      expect.objectContaining({
+        currentTooth: 19,
+        lastCommittedTooth: 18,
       })
     );
     expect(infoSpy).toHaveBeenCalledWith(

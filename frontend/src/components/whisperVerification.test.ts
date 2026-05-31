@@ -62,6 +62,13 @@ describe('verifySuspiciousTranscriptWithWhisper', () => {
       audioChunks: [new Uint8Array([1, 2, 3, 4]).buffer],
       originalTranscript: 'banana 223',
       suspiciousReasons: ['suspicious_transcript'],
+      currentTooth: 14,
+      lastCommittedTooth: 13,
+      currentSurface: 'buccal',
+      recentTranscriptHistory: [
+        { text: '323', timestamp: 1, source: 'deepgram' },
+        { text: 'bleeding', timestamp: 2, source: 'deepgram' },
+      ],
     });
 
     expect(result.whisperTranscript).toBe('verified 323');
@@ -83,6 +90,14 @@ describe('verifySuspiciousTranscriptWithWhisper', () => {
       expect.objectContaining({
         correctedTranscript: 'verified 323',
         aiVerified: true,
+      })
+    );
+    expect(infoSpy).toHaveBeenCalledWith(
+      'CONTEXT_BUILD',
+      expect.objectContaining({
+        currentTooth: 14,
+        lastCommittedTooth: 13,
+        currentSurface: 'buccal',
       })
     );
 

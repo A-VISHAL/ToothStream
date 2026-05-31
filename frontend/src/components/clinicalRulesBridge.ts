@@ -80,6 +80,25 @@ const RULE_TOKEN_WHITELIST = new Set([
   'me',
 ]);
 
+const MODIFIER_VOCABULARY = new Set([
+  'recession',
+  'furcation',
+  'bleeding',
+  'implant',
+  'mobility',
+  'exudate',
+  'interproximal',
+  'healthy',
+  'surface',
+  'surfaces',
+]);
+
+const MODIFIER_ALIAS_PATTERNS = [
+  { pattern: /\bresolution\b/i, canonical: 'recession' },
+  { pattern: /\bvacation\b/i, canonical: 'furcation' },
+  { pattern: /\binter\s+proximal\b/i, canonical: 'interproximal' },
+];
+
 const AMBIGUITY_PHRASES = [
   'maybe',
   'probably',
@@ -169,6 +188,62 @@ function hasCommitContent(payload: PerioPayload | null): payload is PerioPayload
   return Array.isArray(payload.depth);
 }
 
+function detectModifierAmbiguity(transcript: string): { ambiguous: boolean; canonical?: string; reason?: string; normalizedTranscript?: string } {
+  const cleaned = transcript.trim();
+
+  for (const alias of MODIFIER_ALIAS_PATTERNS) {
+    if (alias.pattern.test(cleaned)) {
+      return {
+        ambiguous: true,
+        canonical: alias.canonical,
+        reason: `modifier alias detected: ${alias.canonical}`,
+        normalizedTranscript: cleaned.replace(alias.pattern, alias.canonical),
+      };
+    }
+  }
+
+  const tokens = tokenizeTranscript(cleaned);
+  const hasNumber = tokens.some((token) => parseNumberToken(token) !== null);
+  const recognizedModifierTokens = tokens.filter((token) => MODIFIER_VOCABULARY.has(token));
+  const unexpectedTokens = tokens.filter((token) => !RULE_TOKEN_WHITELIST.has(token) && parseNumberToken(token) === null);
+
+  if (unexpectedTokens.length === 0) {
+    return {
+      ambiguous: false,
+    };
+  }
+
+  if (hasNumber && tokens.length <= 3) {
+    return {
+      ambiguous: true,
+      canonical: recognizedModifierTokens[0],
+      reason: 'modifier phrase with numeric context',
+      normalizedTranscript: cleaned.toLowerCase(),
+    };
+  }
+
+  if (recognizedModifierTokens.length > 0 && unexpectedTokens.length > 0) {
+    return {
+      ambiguous: true,
+      canonical: recognizedModifierTokens[0],
+      reason: 'modifier phrase with non-dental noise',
+      normalizedTranscript: cleaned.toLowerCase(),
+    };
+  }
+
+  if (tokens.length <= 3 && unexpectedTokens.length > 0) {
+    return {
+      ambiguous: true,
+      reason: 'short ambiguous modifier phrase',
+      normalizedTranscript: cleaned.toLowerCase(),
+    };
+  }
+
+  return {
+    ambiguous: false,
+  };
+}
+
 function estimateSpeechConfidence(transcript: string, unexpectedTokens: string[], payload: PerioPayload | null): number {
   const cleaned = transcript.trim().toLowerCase();
   let confidence = payload && Array.isArray(payload.depth) ? 0.96 : 0.72;
@@ -201,6 +276,7 @@ export function buildLiveClinicalRulesInput(context: LiveClinicalRulesContext): 
   const transcriptToothCandidate = extractToothCandidate(rawTranscript);
   const surfaceCandidate = payload?.surface ?? extractSurfaceCandidate(rawTranscript) ?? context.currentSurface ?? undefined;
   const confidence = context.speechConfidence ?? estimateSpeechConfidence(rawTranscript, unexpectedTokens, payload);
+  const modifierAmbiguity = detectModifierAmbiguity(rawTranscript);
 
   if (hasCommitContent(payload)) {
     return {
@@ -212,6 +288,25 @@ export function buildLiveClinicalRulesInput(context: LiveClinicalRulesContext): 
       normalizedTranscript: payload.normalizedTranscript ?? rawTranscript.toLowerCase(),
       parserAmbiguous: unexpectedTokens.length > 0,
       unexpectedTokens: unexpectedTokens.length > 0 ? unexpectedTokens : undefined,
+    };
+  }
+
+  if (modifierAmbiguity.ambiguous) {
+    console.info('MODIFIER_AMBIGUITY_DETECTED', {
+      transcript: rawTranscript,
+      reason: modifierAmbiguity.reason ?? 'modifier ambiguity detected',
+      canonical: modifierAmbiguity.canonical ?? null,
+      unexpectedTokens,
+    });
+
+    return {
+      tooth: context.currentTooth ?? transcriptToothCandidate ?? undefined,
+      surface: surfaceCandidate,
+      confidence: Math.max(0.25, confidence - 0.12),
+      transcript: rawTranscript,
+      normalizedTranscript: modifierAmbiguity.normalizedTranscript ?? rawTranscript.toLowerCase(),
+      parserAmbiguous: true,
+      unexpectedTokens: unexpectedTokens.length > 0 ? unexpectedTokens : ['modifier_ambiguity'],
     };
   }
 

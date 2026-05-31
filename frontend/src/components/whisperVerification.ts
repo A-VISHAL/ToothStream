@@ -1,4 +1,5 @@
 import { decideTranscriptWithDeepSeek } from './deepseekDecision';
+import { buildClinicalCorrectionContext, type ClinicalTranscriptHistoryEntry, type ClinicalTripletContext } from './clinicalContextBuilder';
 
 const OXLO_WHISPER_ENDPOINT = 'https://api.oxlo.ai/v1/audio/transcriptions';
 const OXLO_MODEL = 'whisper-large-v3';
@@ -26,6 +27,13 @@ export interface WhisperVerificationInput {
   suspiciousReasons: string[];
   toothContext?: string | number | null;
   surfaceContext?: string | null;
+  currentTooth?: number | null;
+  lastCommittedTooth?: number | null;
+  currentSurface?: string | null;
+  lastTripletContext?: ClinicalTripletContext | null;
+  recentTranscriptHistory?: ClinicalTranscriptHistoryEntry[];
+  parsedFindings?: string[];
+  knownDentalTerms?: string[];
 }
 
 export interface WhisperVerificationResult {
@@ -217,12 +225,26 @@ export async function verifySuspiciousTranscriptWithWhisper(
       suspiciousReasons: input.suspiciousReasons,
     });
 
+    const correctionContext = buildClinicalCorrectionContext({
+      deepgramTranscript: input.originalTranscript,
+      whisperTranscript: whisperTranscript || input.originalTranscript,
+      currentTooth: input.currentTooth ?? (typeof input.toothContext === 'number' ? input.toothContext : null),
+      lastCommittedTooth: input.lastCommittedTooth ?? null,
+      currentSurface: input.currentSurface ?? input.surfaceContext ?? null,
+      lastTripletContext: input.lastTripletContext ?? null,
+      recentTranscriptHistory: input.recentTranscriptHistory ?? [],
+      suspiciousReasons: input.suspiciousReasons,
+      parsedFindings: input.parsedFindings ?? [],
+      knownDentalTerms: input.knownDentalTerms,
+    });
+
     const deepSeekResult = await decideTranscriptWithDeepSeek({
       deepgramTranscript: input.originalTranscript,
       whisperTranscript: whisperTranscript || input.originalTranscript,
       suspiciousReasons: input.suspiciousReasons,
       toothContext: input.toothContext ?? null,
       surfaceContext: input.surfaceContext ?? null,
+      clinicalContext: correctionContext,
     });
 
     const result: WhisperVerificationResult = {
