@@ -380,141 +380,143 @@ async def websocket_audio_endpoint(websocket: WebSocket) -> None:
         logger.info("Audio WebSocket connection cleaned up.")
 
 
-
-    @app.post("/api/whisper-verify")
-    async def proxy_whisper_verify(
-        file: UploadFile = File(...),
-        originalTranscript: str = Form(''),
-        suspiciousReasons: str = Form('[]'),
-        toothContext: str | None = Form(None),
-        surfaceContext: str | None = Form(None),
-        currentTooth: str | None = Form(None),
-        lastCommittedTooth: str | None = Form(None),
-        currentSurface: str | None = Form(None),
-    ):
-        if not OXLO_API_KEY:
-            raise HTTPException(status_code=500, detail="Missing OXLO_API_KEY on server")
-
-        logger.info('BACKEND_WHISPER_REQUEST', {
-            'filename': getattr(file, 'filename', None),
-            'originalTranscript': originalTranscript,
-            'suspiciousReasons': suspiciousReasons,
-        })
-
-        try:
-            import aiohttp
-
-            data = aiohttp.FormData()
-            data.add_field('model', 'whisper-large-v3')
-            data.add_field('language', 'en')
-            content = await file.read()
-            data.add_field('file', content, filename=(file.filename or 'audio.wav'), content_type='audio/wav')
-
-            async with aiohttp.ClientSession() as session:
-                headers = {'Authorization': f'Bearer {OXLO_API_KEY}'}
-                async with session.post('https://api.oxlo.ai/v1/audio/transcriptions', data=data, headers=headers) as resp:
-                    resp_text = await resp.text()
-                    logger.info('BACKEND_OXLO_RESPONSE', {'status': resp.status, 'text_len': len(resp_text)})
-                    if resp.status >= 400:
-                        raise HTTPException(status_code=502, detail=f'Oxlo whisper error {resp.status}')
-                    resp_json = await resp.json()
-
-            # extract transcript and confidence similarly to frontend
-            whisperTranscript = ''
-            confidence = 0
-            if isinstance(resp_json, dict):
-                channel = resp_json.get('channel') or {}
-                alternatives = channel.get('alternatives') or []
-                if alternatives and isinstance(alternatives, list) and alternatives[0]:
-                    whisperTranscript = (alternatives[0].get('transcript') or '').strip()
-                    confidence = alternatives[0].get('confidence', 0) or 0
-
-            return {
-                'whisperTranscript': whisperTranscript,
-                'confidence': confidence,
-                'status': 'ok',
-            }
-        except HTTPException:
-            raise
-        except Exception as exc:
-            logger.exception('Whisper proxy error')
-            raise HTTPException(status_code=500, detail=str(exc))
+@app.get('/health')
+async def health() -> dict[str, str]:
+    return {'status': 'ok'}
 
 
-    @app.post('/api/deepseek-decision')
-    async def proxy_deepseek_decision(request: Request):
-        if not OXLO_API_KEY:
-            raise HTTPException(status_code=500, detail='Missing OXLO_API_KEY on server')
+@app.post("/api/whisper-verify")
+async def proxy_whisper_verify(
+    file: UploadFile = File(...),
+    originalTranscript: str = Form(''),
+    suspiciousReasons: str = Form('[]'),
+    toothContext: str | None = Form(None),
+    surfaceContext: str | None = Form(None),
+    currentTooth: str | None = Form(None),
+    lastCommittedTooth: str | None = Form(None),
+    currentSurface: str | None = Form(None),
+):
+    if not OXLO_API_KEY:
+        raise HTTPException(status_code=500, detail="Missing OXLO_API_KEY on server")
 
-        payload = await request.json()
-        logger.info('BACKEND_DEEPSEEK_REQUEST', {'payload_keys': list(payload.keys())})
+    logger.info('BACKEND_WHISPER_REQUEST', {
+        'filename': getattr(file, 'filename', None),
+        'originalTranscript': originalTranscript,
+        'suspiciousReasons': suspiciousReasons,
+    })
 
-        try:
-            import aiohttp
+    try:
+        import aiohttp
 
-            # Allow frontend to send a constructed prompt or structured payload; prefer 'prompt' if provided
-            user_content = payload.get('prompt') if isinstance(payload, dict) else payload
+        data = aiohttp.FormData()
+        data.add_field('model', 'whisper-large-v3')
+        data.add_field('language', 'en')
+        content = await file.read()
+        data.add_field('file', content, filename=(file.filename or 'audio.wav'), content_type='audio/wav')
 
-            body = {
-                'model': 'deepseek-v3.2',
-                'temperature': 0,
-                'messages': [
-                    {'role': 'system', 'content': 'You are a clinical transcript decision engine for periodontal dictation. Return strict JSON only.'},
-                    {'role': 'user', 'content': user_content},
-                ],
-            }
+        async with aiohttp.ClientSession() as session:
+            headers = {'Authorization': f'Bearer {OXLO_API_KEY}'}
+            async with session.post('https://api.oxlo.ai/v1/audio/transcriptions', data=data, headers=headers) as resp:
+                resp_text = await resp.text()
+                logger.info('BACKEND_OXLO_RESPONSE', {'status': resp.status, 'text_len': len(resp_text)})
+                if resp.status >= 400:
+                    raise HTTPException(status_code=502, detail=f'Oxlo whisper error {resp.status}')
+                resp_json = await resp.json()
 
-            async with aiohttp.ClientSession() as session:
-                headers = {'Authorization': f'Bearer {OXLO_API_KEY}', 'Content-Type': 'application/json'}
-                async with session.post('https://api.oxlo.ai/v1/chat/completions', json=body, headers=headers) as resp:
-                    resp_text = await resp.text()
-                    logger.info('BACKEND_OXLO_RESPONSE', {'status': resp.status, 'text_len': len(resp_text)})
-                    if resp.status >= 400:
-                        raise HTTPException(status_code=502, detail=f'Oxlo deepseek error {resp.status}')
-                    resp_json = await resp.json()
+        whisperTranscript = ''
+        confidence = 0
+        if isinstance(resp_json, dict):
+            channel = resp_json.get('channel') or {}
+            alternatives = channel.get('alternatives') or []
+            if alternatives and isinstance(alternatives, list) and alternatives[0]:
+                whisperTranscript = (alternatives[0].get('transcript') or '').strip()
+                confidence = alternatives[0].get('confidence', 0) or 0
 
-            return {'response': resp_json}
-        except HTTPException:
-            raise
-        except Exception as exc:
-            logger.exception('DeepSeek proxy error')
-            raise HTTPException(status_code=500, detail=str(exc))
+        return {
+            'whisperTranscript': whisperTranscript,
+            'confidence': confidence,
+            'status': 'ok',
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception('Whisper proxy error')
+        raise HTTPException(status_code=500, detail=str(exc))
 
 
-    @app.post('/api/generate-report')
-    async def proxy_generate_report(request: Request):
-        if not OXLO_API_KEY:
-            raise HTTPException(status_code=500, detail='Missing OXLO_API_KEY on server')
+@app.post('/api/deepseek-decision')
+async def proxy_deepseek_decision(request: Request):
+    if not OXLO_API_KEY:
+        raise HTTPException(status_code=500, detail='Missing OXLO_API_KEY on server')
 
-        payload = await request.json()
-        logger.info('BACKEND_REPORT_REQUEST', {'payload_keys': list(payload.keys())})
+    payload = await request.json()
+    logger.info('BACKEND_DEEPSEEK_REQUEST', {'payload_keys': list(payload.keys())})
 
-        try:
-            import aiohttp
+    try:
+        import aiohttp
 
-            user_content = payload.get('prompt') if isinstance(payload, dict) else payload
+        user_content = payload.get('prompt') if isinstance(payload, dict) else payload
 
-            body = {
-                'model': 'deepseek-v3.2',
-                'temperature': 0,
-                'messages': [
-                    {'role': 'system', 'content': 'You generate concise periodontal reports from chart evidence only. Return strict JSON only.'},
-                    {'role': 'user', 'content': user_content},
-                ],
-            }
+        body = {
+            'model': 'deepseek-v3.2',
+            'temperature': 0,
+            'messages': [
+                {'role': 'system', 'content': 'You are a clinical transcript decision engine for periodontal dictation. Return strict JSON only.'},
+                {'role': 'user', 'content': user_content},
+            ],
+        }
 
-            async with aiohttp.ClientSession() as session:
-                headers = {'Authorization': f'Bearer {OXLO_API_KEY}', 'Content-Type': 'application/json'}
-                async with session.post('https://api.oxlo.ai/v1/chat/completions', json=body, headers=headers) as resp:
-                    resp_text = await resp.text()
-                    logger.info('BACKEND_OXLO_RESPONSE', {'status': resp.status, 'text_len': len(resp_text)})
-                    if resp.status >= 400:
-                        raise HTTPException(status_code=502, detail=f'Oxlo report error {resp.status}')
-                    resp_json = await resp.json()
+        async with aiohttp.ClientSession() as session:
+            headers = {'Authorization': f'Bearer {OXLO_API_KEY}', 'Content-Type': 'application/json'}
+            async with session.post('https://api.oxlo.ai/v1/chat/completions', json=body, headers=headers) as resp:
+                resp_text = await resp.text()
+                logger.info('BACKEND_OXLO_RESPONSE', {'status': resp.status, 'text_len': len(resp_text)})
+                if resp.status >= 400:
+                    raise HTTPException(status_code=502, detail=f'Oxlo deepseek error {resp.status}')
+                resp_json = await resp.json()
 
-            return {'response': resp_json}
-        except HTTPException:
-            raise
-        except Exception as exc:
-            logger.exception('Report proxy error')
-            raise HTTPException(status_code=500, detail=str(exc))
+        return {'response': resp_json}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception('DeepSeek proxy error')
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.post('/api/generate-report')
+async def proxy_generate_report(request: Request):
+    if not OXLO_API_KEY:
+        raise HTTPException(status_code=500, detail='Missing OXLO_API_KEY on server')
+
+    payload = await request.json()
+    logger.info('BACKEND_REPORT_REQUEST', {'payload_keys': list(payload.keys())})
+
+    try:
+        import aiohttp
+
+        user_content = payload.get('prompt') if isinstance(payload, dict) else payload
+
+        body = {
+            'model': 'deepseek-v3.2',
+            'temperature': 0,
+            'messages': [
+                {'role': 'system', 'content': 'You generate concise periodontal reports from chart evidence only. Return strict JSON only.'},
+                {'role': 'user', 'content': user_content},
+            ],
+        }
+
+        async with aiohttp.ClientSession() as session:
+            headers = {'Authorization': f'Bearer {OXLO_API_KEY}', 'Content-Type': 'application/json'}
+            async with session.post('https://api.oxlo.ai/v1/chat/completions', json=body, headers=headers) as resp:
+                resp_text = await resp.text()
+                logger.info('BACKEND_OXLO_RESPONSE', {'status': resp.status, 'text_len': len(resp_text)})
+                if resp.status >= 400:
+                    raise HTTPException(status_code=502, detail=f'Oxlo report error {resp.status}')
+                resp_json = await resp.json()
+
+        return {'response': resp_json}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception('Report proxy error')
+        raise HTTPException(status_code=500, detail=str(exc))
