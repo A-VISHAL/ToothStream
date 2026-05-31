@@ -121,6 +121,8 @@ export function useDeepgramTranscription() {
   const resampleStateRef = useRef<ResampleState>({ buffer: new Float32Array(0), position: 0 });
   const chunkCountRef = useRef(0);
   const sendCountRef = useRef(0);
+  const firstChunkSentAtRef = useRef<number | null>(null);
+  const firstPartialAtRef = useRef<number | null>(null);
 
   const log = useCallback((level: 'info' | 'warn' | 'error' | 'debug', ...args: unknown[]) => {
     const logger = console[level] ?? console.log;
@@ -203,6 +205,20 @@ export function useDeepgramTranscription() {
           return;
         }
 
+        const wsReceivedAt = Date.now();
+        console.info('WS_AUDIO_RECEIVED', {
+          ts: wsReceivedAt,
+          latencyBrowserToBackend: firstChunkSentAtRef.current !== null
+            ? wsReceivedAt - firstChunkSentAtRef.current
+            : null,
+        });
+
+        if (firstChunkSentAtRef.current !== null) {
+          console.info('LATENCY_BROWSER_TO_BACKEND', {
+            ms: wsReceivedAt - firstChunkSentAtRef.current,
+          });
+        }
+
         let payload: TranscriptMessage;
 
         try {
@@ -243,6 +259,19 @@ export function useDeepgramTranscription() {
         }
 
         if (payload.is_final || payload.speech_final) {
+          const finalAt = Date.now();
+          console.info('DEEPGRAM_FINAL', {
+            transcript: payload.transcript || '',
+            ts: finalAt,
+          });
+          if (firstPartialAtRef.current !== null) {
+            console.info('LATENCY_DEEPGRAM', {
+              ms: finalAt - firstPartialAtRef.current,
+              firstPartialAt: firstPartialAtRef.current,
+              finalAt,
+            });
+            firstPartialAtRef.current = null;
+          }
           log('info', 'Final transcript received', payload.transcript || '');
           pushSegment(payload.transcript || '');
           setInterimTranscript('');
@@ -250,6 +279,13 @@ export function useDeepgramTranscription() {
         }
 
         if (payload.transcript) {
+          if (firstPartialAtRef.current === null) {
+            firstPartialAtRef.current = Date.now();
+            console.info('DEEPGRAM_FIRST_PARTIAL', {
+              transcript: payload.transcript,
+              ts: firstPartialAtRef.current,
+            });
+          }
           log('debug', 'Interim transcript received', payload.transcript);
         }
         setInterimTranscript(payload.transcript || '');
@@ -350,6 +386,8 @@ export function useDeepgramTranscription() {
     resampleStateRef.current = { buffer: new Float32Array(0), position: 0 };
     chunkCountRef.current = 0;
     sendCountRef.current = 0;
+    firstChunkSentAtRef.current = null;
+    firstPartialAtRef.current = null;
     setInterimTranscript('');
     setIsRecording(false);
     setConnectionState('disconnected');
@@ -381,6 +419,8 @@ export function useDeepgramTranscription() {
     resampleStateRef.current = { buffer: new Float32Array(0), position: 0 };
     chunkCountRef.current = 0;
     sendCountRef.current = 0;
+    firstChunkSentAtRef.current = null;
+    firstPartialAtRef.current = null;
     setConnectionState('connecting');
 
     try {
@@ -423,10 +463,27 @@ export function useDeepgramTranscription() {
 
         if (socket && socket.readyState === WebSocket.OPEN) {
           sendCountRef.current += 1;
+          const chunkSentAt = Date.now();
           if (sendCountRef.current <= 5 || sendCountRef.current % 20 === 0) {
             log('info', 'Sending audio chunk', { chunk: sendCountRef.current, bytes: pcmChunk.byteLength });
           }
           socket.send(pcmChunk);
+          // Track first chunk sent time for LATENCY_BROWSER_TO_BACKEND
+          if (firstChunkSentAtRef.current === null) {
+            firstChunkSentAtRef.current = chunkSentAt;
+          }
+          if (sendCountRef.current <= 5 || sendCountRef.current % 20 === 0) {
+            console.info('MIC_CHUNK_SENT', {
+              chunk: sendCountRef.current,
+              bytes: pcmChunk.byteLength,
+              ts: chunkSentAt,
+            });
+            console.info('DEEPGRAM_AUDIO_SENT', {
+              chunk: sendCountRef.current,
+              bytes: pcmChunk.byteLength,
+              ts: chunkSentAt,
+            });
+          }
           setConnectionState('listening');
           return;
         }

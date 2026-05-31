@@ -84,6 +84,13 @@ function buildWavBlob(audioChunks: ArrayBuffer[]): Blob | null {
 export async function verifySuspiciousTranscriptWithWhisper(
   input: WhisperVerificationInput
 ): Promise<WhisperVerificationResult> {
+  const whisperStartAt = Date.now();
+  console.info('WHISPER_START', {
+    originalTranscript: input.originalTranscript,
+    suspiciousReasons: input.suspiciousReasons,
+    audioChunks: input.audioChunks.length,
+    ts: whisperStartAt,
+  });
   console.info('WHISPER_AUTH_CHECK', { usingBackendProxy: true });
 
   console.info('WHISPER_TRIGGERED', {
@@ -189,6 +196,14 @@ export async function verifySuspiciousTranscriptWithWhisper(
     };
 
     console.info('WHISPER_VERIFY_COMPLETE', result);
+    const whisperDoneAt = Date.now();
+    console.info('WHISPER_DONE', {
+      aiVerified: result.aiVerified,
+      ts: whisperDoneAt,
+    });
+    console.info('LATENCY_WHISPER', {
+      ms: whisperDoneAt - whisperStartAt,
+    });
     return result;
   } catch (error) {
     console.info('WHISPER_FALLBACK', {
@@ -197,6 +212,15 @@ export async function verifySuspiciousTranscriptWithWhisper(
       suspiciousReasons: input.suspiciousReasons,
     });
     console.info('WHISPER_VERIFY_COMPLETE', fallbackResult);
+    const whisperDoneAt = Date.now();
+    console.info('WHISPER_DONE', {
+      aiVerified: false,
+      fallback: true,
+      ts: whisperDoneAt,
+    });
+    console.info('LATENCY_WHISPER', {
+      ms: whisperDoneAt - whisperStartAt,
+    });
     return fallbackResult;
   }
 }

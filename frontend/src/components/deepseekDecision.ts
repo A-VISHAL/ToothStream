@@ -311,6 +311,12 @@ function normalizeDecisionResult(
 export async function decideTranscriptWithDeepSeek(
   input: DeepSeekDecisionInput
 ): Promise<DeepSeekDecisionResult> {
+  const deepseekStartAt = Date.now();
+  console.info('DEEPSEEK_START', {
+    deepgramTranscript: input.deepgramTranscript,
+    whisperTranscript: input.whisperTranscript,
+    ts: deepseekStartAt,
+  });
   console.info('DEEPSEEK_TRIGGERED', {
     deepgramTranscript: input.deepgramTranscript,
     whisperTranscript: input.whisperTranscript,
@@ -343,6 +349,16 @@ export async function decideTranscriptWithDeepSeek(
       });
     }
 
+    const deepseekDoneAt = Date.now();
+    console.info('DEEPSEEK_DONE', {
+      decision: result.decision,
+      aiVerified: result.aiVerified,
+      ts: deepseekDoneAt,
+    });
+    console.info('LATENCY_DEEPSEEK', {
+      ms: deepseekDoneAt - deepseekStartAt,
+    });
+
     return result;
   } catch (error) {
     const fallback = buildNoDecision(error instanceof Error ? error.message : 'unknown_deepseek_error');
@@ -352,6 +368,15 @@ export async function decideTranscriptWithDeepSeek(
       whisperTranscript: input.whisperTranscript,
     });
     console.info('NO_DECISION', fallback);
+    const deepseekDoneAt = Date.now();
+    console.info('DEEPSEEK_DONE', {
+      decision: 'no_decision',
+      fallback: true,
+      ts: deepseekDoneAt,
+    });
+    console.info('LATENCY_DEEPSEEK', {
+      ms: deepseekDoneAt - deepseekStartAt,
+    });
     return fallback;
   }
 }

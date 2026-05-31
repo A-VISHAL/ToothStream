@@ -1002,6 +1002,12 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
 
     processedTranscriptIdsRef.current.add(latestFinal.id);
 
+    const parserStartAt = Date.now();
+    console.info('PARSER_START', {
+      transcript: latestFinal.text.trim(),
+      ts: parserStartAt,
+    });
+
     const normalizedTranscript = latestFinal.text.trim().toLowerCase();
 
     console.info('[Perio UI] final transcript received', {
@@ -1210,6 +1216,16 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
       currentSurface: resolvedCurrentSurface,
     });
 
+    const parserDoneAt = Date.now();
+    console.info('PARSER_DONE', {
+      transcript: latestFinal.text.trim(),
+      hasPayload: Boolean(payload),
+      ts: parserDoneAt,
+    });
+    console.info('LATENCY_PARSER', {
+      ms: parserDoneAt - parserStartAt,
+    });
+
     if (payload && (payload.surface !== undefined || payload.siteIndex !== undefined)) {
       console.info('[Perio UI] surface state command', {
         RAW: latestFinal.text.trim(),
@@ -1324,6 +1340,16 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
+    const chartCommitAt = Date.now();
+    console.info('CHART_COMMIT', {
+      transcript: latestFinal.text.trim(),
+      ts: chartCommitAt,
+    });
+    console.info('LATENCY_TOTAL_E2E', {
+      ms: chartCommitAt - parserStartAt,
+      parserStartAt,
+      chartCommitAt,
+    });
     commitParsedPayload(payload);
   }, [
     setTeeth,
