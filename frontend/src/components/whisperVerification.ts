@@ -121,6 +121,16 @@ export async function verifySuspiciousTranscriptWithWhisper(
     return fallbackResult;
   }
 
+  // Log audio window metrics
+  const totalAudioByteLength = input.audioChunks.reduce((sum, chunk) => sum + chunk.byteLength, 0);
+  const audioDurationMs = (totalAudioByteLength / (WHISPER_SAMPLE_RATE * WHISPER_CHANNELS * 2)) * 1000;
+  console.info('WHISPER_AUDIO_WINDOW', {
+    chunkCount: input.audioChunks.length,
+    totalAudioBytes: totalAudioByteLength,
+    estimatedAudioDurationMs: Math.round(audioDurationMs),
+    blobSizeBytes: audioBlob.size,
+  });
+
   try {
 
     console.info('WHISPER_REQUEST_START', {
@@ -140,14 +150,24 @@ export async function verifySuspiciousTranscriptWithWhisper(
     formData.append('suspiciousReasons', JSON.stringify(input.suspiciousReasons || []));
     formData.append('file', audioBlob, 'suspicious-audio.wav');
 
+    const uploadStartAt = Date.now();
+    console.info('WHISPER_UPLOAD_START', {
+      endpoint: BACKEND_WHISPER_ENDPOINT,
+      blobSizeBytes: audioBlob.size,
+      ts: uploadStartAt,
+    });
+
     const response = await fetch(BACKEND_WHISPER_ENDPOINT, {
       method: 'POST',
       body: formData,
     });
 
-    console.info('WHISPER_RESPONSE', {
-      ok: response.ok,
+    const uploadDoneAt = Date.now();
+    console.info('WHISPER_UPLOAD_DONE', {
+      uploadDurationMs: uploadDoneAt - uploadStartAt,
       status: response.status,
+      ok: response.ok,
+      ts: uploadDoneAt,
     });
 
     if (!response.ok) {
@@ -177,6 +197,11 @@ export async function verifySuspiciousTranscriptWithWhisper(
       knownDentalTerms: input.knownDentalTerms,
     });
 
+    const deepSeekStartAt = Date.now();
+    console.info('WHISPER_DEEPSEEK_START', {
+      ts: deepSeekStartAt,
+    });
+
     const deepSeekResult = await decideTranscriptWithDeepSeek({
       deepgramTranscript: input.originalTranscript,
       whisperTranscript: whisperTranscript || input.originalTranscript,
@@ -184,6 +209,12 @@ export async function verifySuspiciousTranscriptWithWhisper(
       toothContext: input.toothContext ?? null,
       surfaceContext: input.surfaceContext ?? null,
       clinicalContext: correctionContext,
+    });
+
+    const deepSeekDoneAt = Date.now();
+    console.info('WHISPER_DEEPSEEK_DONE', {
+      deepSeekDurationMs: deepSeekDoneAt - deepSeekStartAt,
+      ts: deepSeekDoneAt,
     });
 
     const result: WhisperVerificationResult = {

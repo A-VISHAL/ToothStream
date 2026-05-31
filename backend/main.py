@@ -412,18 +412,45 @@ async def proxy_whisper_verify(
 
     try:
         import aiohttp
+        import time
 
         data = aiohttp.FormData()
         data.add_field('model', 'whisper-large-v3')
         data.add_field('language', 'en')
+        
+        file_read_start = time.time()
         content = await file.read()
+        file_read_duration = (time.time() - file_read_start) * 1000
+        logger.info('BACKEND_FILE_READ_DONE', {
+            'file_size_bytes': len(content),
+            'read_duration_ms': round(file_read_duration),
+        })
+        
         data.add_field('file', content, filename=(file.filename or 'audio.wav'), content_type='audio/wav')
+
+        oxlo_start = time.time()
+        logger.info('WHISPER_API_START', {
+            'ts': oxlo_start,
+            'endpoint': 'https://api.oxlo.ai/v1/audio/transcriptions',
+        })
 
         async with aiohttp.ClientSession() as session:
             headers = {'Authorization': f'Bearer {OXLO_API_KEY}'}
             async with session.post('https://api.oxlo.ai/v1/audio/transcriptions', data=data, headers=headers) as resp:
                 resp_text = await resp.text()
-                logger.info('BACKEND_OXLO_RESPONSE', {'status': resp.status, 'text_len': len(resp_text)})
+                oxlo_done = time.time()
+                oxlo_duration = (oxlo_done - oxlo_start) * 1000
+                logger.info('WHISPER_API_DONE', {
+                    'status': resp.status,
+                    'api_duration_ms': round(oxlo_duration),
+                    'response_size_bytes': len(resp_text),
+                    'ts': oxlo_done,
+                })
+                logger.info('BACKEND_OXLO_RESPONSE', {
+                    'status': resp.status,
+                    'text_len': len(resp_text),
+                    'api_duration_ms': round(oxlo_duration),
+                })
                 if resp.status >= 400:
                     raise HTTPException(status_code=502, detail=f'Oxlo whisper error {resp.status}')
                 resp_json = await resp.json()
@@ -459,6 +486,7 @@ async def proxy_deepseek_decision(request: Request):
 
     try:
         import aiohttp
+        import time
 
         user_content = payload.get('prompt') if isinstance(payload, dict) else payload
 
@@ -471,11 +499,29 @@ async def proxy_deepseek_decision(request: Request):
             ],
         }
 
+        deepseek_start = time.time()
+        logger.info('DEEPSEEK_API_START', {
+            'ts': deepseek_start,
+            'endpoint': 'https://api.oxlo.ai/v1/chat/completions',
+        })
+
         async with aiohttp.ClientSession() as session:
             headers = {'Authorization': f'Bearer {OXLO_API_KEY}', 'Content-Type': 'application/json'}
             async with session.post('https://api.oxlo.ai/v1/chat/completions', json=body, headers=headers) as resp:
                 resp_text = await resp.text()
-                logger.info('BACKEND_OXLO_RESPONSE', {'status': resp.status, 'text_len': len(resp_text)})
+                deepseek_done = time.time()
+                deepseek_duration = (deepseek_done - deepseek_start) * 1000
+                logger.info('DEEPSEEK_API_DONE', {
+                    'status': resp.status,
+                    'api_duration_ms': round(deepseek_duration),
+                    'response_size_bytes': len(resp_text),
+                    'ts': deepseek_done,
+                })
+                logger.info('BACKEND_OXLO_RESPONSE', {
+                    'status': resp.status,
+                    'text_len': len(resp_text),
+                    'api_duration_ms': round(deepseek_duration),
+                })
                 if resp.status >= 400:
                     raise HTTPException(status_code=502, detail=f'Oxlo deepseek error {resp.status}')
                 resp_json = await resp.json()
