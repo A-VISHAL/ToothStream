@@ -64,6 +64,10 @@ const RULE_TOKEN_WHITELIST = new Set([
   'recession',
   'mobility',
   'furcation',
+  'open',
+  'charted',
+  'class',
+  'grade',
   'exudate',
   'undo',
   'next',
@@ -86,6 +90,8 @@ const MODIFIER_VOCABULARY = new Set([
   'bleeding',
   'implant',
   'mobility',
+  'open',
+  'charted',
   'exudate',
   'interproximal',
   'healthy',
@@ -310,7 +316,7 @@ export function buildLiveClinicalRulesInput(context: LiveClinicalRulesContext): 
     };
   }
 
-  if (payload === null && transcriptToothCandidate !== null && (transcriptToothCandidate < 1 || transcriptToothCandidate > 32)) {
+  if (payload === null && transcriptToothCandidate !== null && (transcriptToothCandidate < 1 || transcriptToothCandidate > 48)) {
     return {
       tooth: transcriptToothCandidate,
       surface: surfaceCandidate,

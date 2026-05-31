@@ -18,7 +18,7 @@ export type ConnectionState = 'connecting' | 'connected' | 'listening' | 'reconn
 export interface PerioPayload {
   tooth?: number;
   explicitTooth?: boolean;
-  command?: 'bleeding' | 'missing' | 'implant' | 'healthy' | 'undo' | 'next' | 'previous' | 'skip' | 'resume';
+  command?: 'bleeding' | 'missing' | 'implant' | 'healthy' | 'mobility' | 'furcation' | 'open' | 'charted' | 'undo' | 'next' | 'previous' | 'skip' | 'resume';
   surface?: string;
   depth?: number[];
   bleeding?: boolean;
@@ -26,6 +26,10 @@ export interface PerioPayload {
   implant?: boolean;
   healthy?: boolean;
   recession?: number | boolean;
+  mobilityClass?: number | boolean;
+  furcationClass?: number | boolean;
+  furcationSurface?: ToothSurface | null;
+  chartStatus?: 'open' | 'charted';
   siteIndex?: number;
   advanceCursor?: boolean;
   toothCommitPending?: boolean;
@@ -52,6 +56,7 @@ export interface ToothSurfaceState {
   bleeding: boolean;
   healthy: boolean;
   recession?: number | boolean;
+  furcationClass?: number | boolean;
   siteIndex: number;
   updatedAt: number;
 }
@@ -60,6 +65,9 @@ export interface ToothState {
   toothNumber: number;
   missing: boolean;
   implant: boolean;
+  mobilityClass?: number | boolean;
+  chartStatus?: 'open' | 'charted';
+  furcationSurface?: ToothSurface | null;
   buccal: ToothSurfaceState;
   lingual: ToothSurfaceState;
   updatedAt: number;

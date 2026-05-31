@@ -77,6 +77,10 @@ const CLINICAL_KEYWORDS = new Set([
   'recession',
   'mobility',
   'furcation',
+  'open',
+  'charted',
+  'class',
+  'grade',
   'exudate',
   'undo',
   'next',
@@ -94,6 +98,21 @@ const MODIFIER_ALIAS_PATTERNS = [
   { pattern: /\bvacation\b/i, canonical: 'furcation' },
   { pattern: /\binter\s+proximal\b/i, canonical: 'interproximal' },
 ];
+
+const TOOTH_ATTACHMENT_KEYWORDS = new Set([
+  'bleeding',
+  'missing',
+  'implant',
+  'healthy',
+  'mobility',
+  'furcation',
+  'interproximal',
+  'open',
+  'charted',
+]);
+
+const CLASS_VALUE_KEYWORDS = new Set(['class', 'grade']);
+
 function normalizeWord(word: string): string {
   return HOMOPHONE_NORMALIZATIONS[word.toLowerCase()] ?? word.toLowerCase();
 }
@@ -261,6 +280,53 @@ function parseToothNumberTokens(tokens: string[]): { tooth: number | null; consu
   }
 
   return { tooth: null, consumed: 0 };
+}
+
+function hasToothAttachmentKeyword(tokens: string[]): boolean {
+  return tokens.some((token) => TOOTH_ATTACHMENT_KEYWORDS.has(token));
+}
+
+function extractDirectToothNumber(tokens: string[]): number | undefined {
+  if (!hasToothAttachmentKeyword(tokens)) {
+    return undefined;
+  }
+
+  for (let index = 0; index < tokens.length; index += 1) {
+    const token = tokens[index] ?? '';
+    const parsed = parseNumberToken(token);
+
+    if (parsed === null || parsed < 1 || parsed > 48) {
+      continue;
+    }
+
+    const previousToken = tokens[index - 1];
+
+    if (previousToken && (CLASS_VALUE_KEYWORDS.has(previousToken) || previousToken === 'recession' || previousToken === 'recessed')) {
+      continue;
+    }
+
+    return parsed;
+  }
+
+  return undefined;
+}
+
+function extractClassValue(tokens: string[]): number | undefined {
+  for (let index = 0; index < tokens.length; index += 1) {
+    const token = tokens[index] ?? '';
+
+    if (!CLASS_VALUE_KEYWORDS.has(token)) {
+      continue;
+    }
+
+    const candidate = parseNumberToken(tokens[index + 1] ?? '');
+
+    if (candidate !== null && candidate >= 0) {
+      return candidate;
+    }
+  }
+
+  return undefined;
 }
 
 function describeToothNumber(tooth: number | null, explicitTooth: boolean): string {
@@ -459,7 +525,7 @@ function extractTooth(tokens: string[], context?: TranscriptParseContext): numbe
     const tail = tokens.slice(index + 1);
     const parsed = parseToothNumberTokens(tail[0] === 'number' ? tail.slice(1) : tail);
 
-    if (parsed.tooth === null || parsed.tooth < 1 || parsed.tooth > 32) {
+    if (parsed.tooth === null || parsed.tooth < 1 || parsed.tooth > 48) {
       continue;
     }
 
@@ -473,7 +539,7 @@ function extractTooth(tokens: string[], context?: TranscriptParseContext): numbe
   if (tokens.length === 1) {
     const parsed = parseToothNumberTokens(tokens);
 
-    if (parsed.tooth !== null && parsed.tooth >= 1 && parsed.tooth <= 32) {
+    if (parsed.tooth !== null && parsed.tooth >= 1 && parsed.tooth <= 48) {
       return parsed.tooth;
     }
   }
@@ -481,9 +547,15 @@ function extractTooth(tokens: string[], context?: TranscriptParseContext): numbe
   if (tokens.length === 2 && tokens[0] === 'two') {
     const parsed = parseToothNumberTokens(tokens.slice(1));
 
-    if (parsed.tooth !== null && parsed.tooth >= 1 && parsed.tooth <= 32) {
+    if (parsed.tooth !== null && parsed.tooth >= 1 && parsed.tooth <= 48) {
       return parsed.tooth;
     }
+  }
+
+  const directTooth = extractDirectToothNumber(tokens);
+
+  if (directTooth !== undefined) {
+    return directTooth;
   }
 
   return undefined;
@@ -550,7 +622,7 @@ function detectCommand(tokens: string[]): PerioPayload['command'] | undefined {
 
   const token = tokens[0];
 
-  if (token === 'bleeding' || token === 'missing' || token === 'implant' || token === 'healthy' || token === 'undo' || token === 'next' || token === 'previous' || token === 'skip' || token === 'resume') {
+  if (token === 'bleeding' || token === 'missing' || token === 'implant' || token === 'healthy' || token === 'mobility' || token === 'furcation' || token === 'open' || token === 'charted' || token === 'undo' || token === 'next' || token === 'previous' || token === 'skip' || token === 'resume') {
     return token;
   }
 
@@ -603,7 +675,7 @@ export function parseTranscriptToPayload(transcript: string, context?: Transcrip
   const protectedTriplet = parseProtectedDepthTriplet(cleaned, context);
   const command = detectCommand(tokens);
   const explicitTooth = tokens.includes('tooth');
-  const tooth = extractTooth(tokens, context);
+  const extractedTooth = extractTooth(tokens, context);
   const surface = extractSurface(normalizedTranscript);
   const siteIndex = extractSiteIndex(normalizedTranscript);
   const recession = extractRecession(tokens);
@@ -613,6 +685,11 @@ export function parseTranscriptToPayload(transcript: string, context?: Transcrip
   const missing = command === 'missing' || /\bmissing\b/i.test(normalizedTranscript);
   const implant = command === 'implant' || /\bimplant\b/i.test(normalizedTranscript);
   const healthy = command === 'healthy' || /\bhealthy\b/i.test(normalizedTranscript);
+  const mobilityClass = tokens.includes('mobility') ? extractClassValue(tokens) ?? true : undefined;
+  const furcationClass = tokens.includes('furcation') ? extractClassValue(tokens) ?? true : undefined;
+  const chartStatus = command === 'open' ? 'open' : command === 'charted' ? 'charted' : depth !== undefined || bleeding || missing || implant || healthy || recession !== undefined || mobilityClass !== undefined || furcationClass !== undefined ? 'charted' : undefined;
+  const toothFindingSignal = bleeding || missing || implant || healthy || recession !== undefined || mobilityClass !== undefined || furcationClass !== undefined || chartStatus !== undefined || surface !== undefined || siteIndex !== undefined;
+  const tooth = extractedTooth ?? (toothFindingSignal ? context?.currentTooth ?? undefined : undefined);
   const explicitAdvance = command === 'next' || command === 'previous' || command === 'skip' || command === 'resume' || missing;
   const toothCommitPending =
     typeof tooth === 'number' ||
@@ -622,6 +699,9 @@ export function parseTranscriptToPayload(transcript: string, context?: Transcrip
     implant ||
     healthy ||
     recession !== undefined ||
+    mobilityClass !== undefined ||
+    furcationClass !== undefined ||
+    chartStatus !== undefined ||
     surface !== undefined ||
     siteIndex !== undefined;
   const awaitingAdditionalFindings = toothCommitPending && !explicitAdvance;
@@ -682,6 +762,10 @@ export function parseTranscriptToPayload(transcript: string, context?: Transcrip
     implant,
     healthy,
     recession,
+    mobilityClass,
+    furcationClass,
+    furcationSurface: tokens.includes('furcation') ? (surface ?? context?.currentSurface ?? null) : undefined,
+    chartStatus,
     siteIndex,
     advanceCursor: explicitAdvance,
     toothCommitPending,

@@ -27,6 +27,7 @@ function createSurfaceState(): ToothSurfaceState {
     bleeding: false,
     healthy: false,
     recession: undefined,
+    furcationClass: undefined,
     siteIndex: 1,
     updatedAt: 0,
   };
@@ -39,6 +40,9 @@ function createInitialTeethState(): Record<number, ToothState> {
         toothNumber,
         missing: false,
         implant: false,
+        mobilityClass: undefined,
+        chartStatus: undefined,
+        furcationSurface: null,
         buccal: createSurfaceState(),
         lingual: createSurfaceState(),
         updatedAt: 0,
@@ -475,6 +479,9 @@ function ingestPayload(
       toothNumber: commitToothNumber,
       missing: false,
       implant: false,
+      mobilityClass: undefined,
+      chartStatus: undefined,
+      furcationSurface: null,
       buccal: createSurfaceState(),
       lingual: createSurfaceState(),
       updatedAt: 0,
@@ -523,6 +530,19 @@ function ingestPayload(
       triggerClinicalSound('acknowledgment', 'manual', 'implant attach');
     } else if (hydrated.implant === false) {
       nextTooth.implant = false;
+    }
+
+    if (typeof hydrated.mobilityClass !== 'undefined') {
+      nextTooth.mobilityClass = hydrated.mobilityClass;
+    }
+
+    if (typeof hydrated.furcationClass !== 'undefined') {
+      nextTooth.furcationSurface = surface;
+      nextTooth[surface] = {
+        ...nextTooth[surface],
+        furcationClass: hydrated.furcationClass,
+        updatedAt: receivedAt,
+      };
     }
 
     if (hydrated.healthy === true) {
@@ -597,6 +617,10 @@ function ingestPayload(
       });
     }
 
+    if (hydrated.chartStatus === 'open') {
+      nextTooth.chartStatus = 'open';
+    }
+
     if (hasTriplet && Array.isArray(hydrated.depth)) {
       console.info('TRIPLET_COMMIT', {
         tooth: commitToothNumber,
@@ -614,6 +638,20 @@ function ingestPayload(
       if (toothWasImplant || nextTooth.implant === true) {
         nextTooth.implant = true;
       }
+    }
+
+    if (
+      hydrated.chartStatus === 'charted' ||
+      hydrated.missing === true ||
+      hydrated.implant === true ||
+      hydrated.bleeding === true ||
+      hydrated.healthy === true ||
+      hydrated.recession !== undefined ||
+      typeof hydrated.mobilityClass !== 'undefined' ||
+      typeof hydrated.furcationClass !== 'undefined' ||
+      hasTriplet
+    ) {
+      nextTooth.chartStatus = 'charted';
     }
 
     nextTooth.updatedAt = receivedAt;
@@ -643,6 +681,9 @@ function ingestPayload(
       bleeding: nextTooth[surface].bleeding,
       healthy: nextTooth[surface].healthy,
       recession: nextTooth[surface].recession,
+      furcationClass: nextTooth[surface].furcationClass,
+      mobilityClass: nextTooth.mobilityClass,
+      chartStatus: nextTooth.chartStatus,
       implant: nextTooth.implant,
     });
 
@@ -1049,7 +1090,7 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
       action: speechFilter.shouldProcess ? 'processed' : 'ignored_non_clinical',
       reason: speechFilter.reason,
     });
-    if (speechFilter.shouldProcess && /\b(recession|recessed|bleeding|bleed(?:ing)?|implant|healthy|mobility|furcation|exudate)\b/i.test(latestFinal.text)) {
+    if (speechFilter.shouldProcess && /\b(recession|recessed|bleeding|bleed(?:ing)?|implant|healthy|mobility|furcation|open|charted|class|grade|exudate)\b/i.test(latestFinal.text)) {
       console.info('CLINICAL_FINDING_DETECTED', {
         transcript: latestFinal.text.trim(),
         intent: speechFilter.intent,
@@ -1132,7 +1173,7 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
             source: entry.source,
           })),
           parsedFindings: lastPayload ? [JSON.stringify(lastPayload)] : [],
-          knownDentalTerms: ['recession', 'furcation', 'bleeding', 'implant', 'healthy', 'mobility', 'exudate', 'interproximal'],
+          knownDentalTerms: ['recession', 'furcation', 'bleeding', 'implant', 'healthy', 'mobility', 'open', 'charted', 'class', 'grade', 'exudate', 'interproximal'],
         });
         const verificationDecision: AiVerificationRecord['decision'] = verification.aiVerified ? 'whisper' : 'no_decision';
 

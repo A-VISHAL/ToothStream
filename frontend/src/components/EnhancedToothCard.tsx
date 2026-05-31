@@ -20,6 +20,13 @@ interface ToothVariant {
   mirror: boolean;
 }
 
+type BadgeTone = 'neutral' | 'danger' | 'warning' | 'success' | 'info';
+
+interface ToothBadge {
+  label: string;
+  tone: BadgeTone;
+}
+
 function getToothVariant(toothNumber: number): ToothVariant {
   const position = toothNumber % 10;
   const isMaxillary = toothNumber < 30;
@@ -56,32 +63,78 @@ function getSeverityColor(tooth: ToothState): { bg: string; border: string; icon
   return { bg: 'bg-green-50', border: 'border-green-300', icon: '✓', level: 'safe' };
 }
 
-function getFindings(tooth: ToothState): string[] {
-  const findings: string[] = [];
-  
-  if (tooth.missing) findings.push('Missing');
-  if (tooth.implant) findings.push('Implant');
-  if (tooth.buccal.bleeding || tooth.lingual.bleeding) findings.push('Bleeding');
-  
-  const maxDepth = Math.max(Math.max(...tooth.buccal.depth), Math.max(...tooth.lingual.depth));
-  if (maxDepth >= 5) findings.push(`Pocket ≥5mm`);
-  else if (maxDepth >= 4) findings.push(`Pocket ≥4mm`);
-  else if (maxDepth > 0) findings.push(`Charted (${maxDepth}mm)`);
-  else findings.push('Open');
-  
-  return findings;
+function formatClassValue(value: number | boolean | undefined): string | null {
+  if (typeof value === 'number') {
+    return `C${value}`;
+  }
+
+  if (value === true) {
+    return '';
+  }
+
+  return null;
 }
 
-function getCompactFindingLabel(tooth: ToothState): string {
-  if (tooth.missing) return 'Missing';
-  if (tooth.implant) return 'Implant';
-  if (tooth.buccal.bleeding || tooth.lingual.bleeding) return 'Bleeding';
-
+function getFindingBadges(tooth: ToothState): ToothBadge[] {
+  const badges: ToothBadge[] = [];
   const maxDepth = Math.max(Math.max(...tooth.buccal.depth), Math.max(...tooth.lingual.depth));
-  if (maxDepth >= 5) return 'Pocket ≥5mm';
-  if (maxDepth >= 4) return 'Pocket ≥4mm';
-  if (maxDepth > 0) return `Charted ${maxDepth}mm`;
-  return 'Open';
+  const recessionValue = tooth.buccal.recession ?? tooth.lingual.recession;
+  const furcationValue = tooth.furcationSurface === 'lingual' ? tooth.lingual.furcationClass : tooth.furcationSurface === 'buccal' ? tooth.buccal.furcationClass : tooth.buccal.furcationClass ?? tooth.lingual.furcationClass;
+
+  if (tooth.missing) {
+    badges.push({ label: 'Missing', tone: 'neutral' });
+  }
+
+  if (tooth.implant) {
+    badges.push({ label: 'Implant', tone: 'neutral' });
+  }
+
+  if (tooth.buccal.bleeding || tooth.lingual.bleeding) {
+    badges.push({ label: 'Bleeding', tone: 'danger' });
+  }
+
+  const mobilityLabel = formatClassValue(tooth.mobilityClass);
+  if (typeof tooth.mobilityClass !== 'undefined') {
+    badges.push({ label: mobilityLabel ? `Mobility ${mobilityLabel}` : 'Mobility', tone: 'warning' });
+  }
+
+  if (typeof furcationValue !== 'undefined') {
+    const furcationLabel = formatClassValue(furcationValue);
+    badges.push({ label: furcationLabel ? `Furcation ${furcationLabel}` : 'Furcation', tone: 'warning' });
+  }
+
+  if (typeof recessionValue !== 'undefined' && recessionValue !== false) {
+    badges.push({ label: `Recession ${typeof recessionValue === 'number' ? recessionValue : ''}`.trim(), tone: 'warning' });
+  }
+
+  const chartStatus = tooth.chartStatus ?? (tooth.missing || tooth.implant || tooth.buccal.bleeding || tooth.lingual.bleeding || typeof tooth.mobilityClass !== 'undefined' || typeof furcationValue !== 'undefined' || typeof recessionValue !== 'undefined' || maxDepth > 0 ? 'charted' : 'open');
+
+  if (chartStatus === 'charted' && maxDepth > 0) {
+    badges.push({ label: maxDepth >= 5 ? `Charted ${maxDepth}mm` : maxDepth >= 4 ? `Charted ${maxDepth}mm` : `Charted ${maxDepth}mm`, tone: maxDepth >= 5 ? 'danger' : maxDepth >= 4 ? 'warning' : 'success' });
+  } else if (chartStatus === 'charted') {
+    badges.push({ label: 'Charted', tone: 'success' });
+  } else {
+    badges.push({ label: 'Open', tone: 'success' });
+  }
+
+  return badges;
+}
+
+function badgeToneClasses(tone: BadgeTone): string {
+  switch (tone) {
+    case 'neutral':
+      return 'border-slate-300 bg-slate-100 text-slate-700';
+    case 'danger':
+      return 'border-rose-200 bg-rose-100 text-rose-700';
+    case 'warning':
+      return 'border-amber-200 bg-amber-100 text-amber-700';
+    case 'success':
+      return 'border-emerald-200 bg-emerald-100 text-emerald-700';
+    case 'info':
+      return 'border-cyan-200 bg-cyan-100 text-cyan-800';
+    default:
+      return 'border-slate-300 bg-slate-100 text-slate-700';
+  }
 }
 
 function ToothSVGRenderer({ toothNumber, arch, compact }: { toothNumber: number; arch: 'maxillary' | 'mandibular'; compact: boolean }) {
@@ -149,9 +202,7 @@ function ToothSVGRenderer({ toothNumber, arch, compact }: { toothNumber: number;
 
 export function EnhancedToothCard({ tooth, isActive, arch, compact = false }: EnhancedToothCardProps) {
   const severity = useMemo(() => getSeverityColor(tooth), [tooth]);
-  const findings = useMemo(() => getFindings(tooth), [tooth]);
-  const maxDepth = Math.max(Math.max(...tooth.buccal.depth), Math.max(...tooth.lingual.depth));
-  const compactFindingLabel = useMemo(() => getCompactFindingLabel(tooth), [tooth]);
+  const badges = useMemo(() => getFindingBadges(tooth), [tooth]);
 
   return (
     <div
@@ -172,57 +223,21 @@ export function EnhancedToothCard({ tooth, isActive, arch, compact = false }: En
       <div className={`relative flex w-full justify-center ${compact ? 'h-[5.6rem]' : 'h-[6.5rem]'}`}>
         <ToothSVGRenderer toothNumber={tooth.toothNumber} arch={arch} compact={compact} />
 
-        <div className="pointer-events-none absolute inset-x-0 bottom-1 flex justify-center">
-          {compact ? (
-            <span
-              className={`rounded-full border px-2 py-0.5 text-[9px] font-semibold leading-none shadow-sm ${
-                compactFindingLabel === 'Missing'
-                  ? 'border-slate-300 bg-slate-100 text-slate-700'
-                  : compactFindingLabel === 'Implant'
-                    ? 'border-slate-300 bg-slate-100 text-slate-700'
-                    : compactFindingLabel === 'Bleeding'
-                      ? 'border-rose-200 bg-rose-100 text-rose-700'
-                      : compactFindingLabel === 'Pocket ≥5mm'
-                        ? 'border-rose-200 bg-rose-100 text-rose-700'
-                        : compactFindingLabel === 'Pocket ≥4mm'
-                          ? 'border-amber-200 bg-amber-100 text-amber-700'
-                          : compactFindingLabel.startsWith('Charted')
-                            ? 'border-amber-200 bg-amber-100 text-amber-700'
-                            : 'border-emerald-200 bg-emerald-100 text-emerald-700'
-              }`}
-            >
-              {compactFindingLabel}
-            </span>
-          ) : (
-            <div className="flex flex-wrap justify-center gap-1">
-              {findings.slice(0, 2).map((finding) => (
-                <span
-                  key={finding}
-                  className={`whitespace-nowrap rounded-full border px-2 py-0.5 text-[9px] font-semibold leading-none shadow-sm ${
-                    finding.includes('Missing')
-                      ? 'border-slate-300 bg-slate-100 text-slate-700'
-                      : finding.includes('Implant')
-                        ? 'border-slate-300 bg-slate-100 text-slate-700'
-                        : finding.includes('Bleeding')
-                          ? 'border-rose-200 bg-rose-100 text-rose-700'
-                          : finding.includes('Pocket ≥5mm')
-                            ? 'border-rose-200 bg-rose-100 text-rose-700'
-                            : finding.includes('Pocket ≥4mm')
-                              ? 'border-amber-200 bg-amber-100 text-amber-700'
-                              : finding.includes('Charted')
-                                ? 'border-amber-200 bg-amber-100 text-amber-700'
-                                : 'border-emerald-200 bg-emerald-100 text-emerald-700'
-                  }`}
-                >
-                  {finding}
-                </span>
-              ))}
-            </div>
-          )}
+        <div className="pointer-events-none absolute inset-x-0 bottom-1 flex justify-center px-1">
+          <div className={`flex max-w-full flex-wrap justify-center gap-1 ${compact ? 'scale-[0.92]' : ''}`}>
+            {badges.slice(0, compact ? 2 : 4).map((badge) => (
+              <span
+                key={badge.label}
+                className={`whitespace-nowrap rounded-full border px-2 py-0.5 text-[9px] font-semibold leading-none shadow-sm ${badgeToneClasses(badge.tone)}`}
+              >
+                {badge.label}
+              </span>
+            ))}
+          </div>
         </div>
       </div>
 
-      {!compact && !tooth.missing && maxDepth > 0 ? (
+      {!compact && !tooth.missing && Math.max(Math.max(...tooth.buccal.depth), Math.max(...tooth.lingual.depth)) > 0 ? (
         <div className="w-full px-1 pb-0.5 text-center text-[9px] text-slate-500">
           <span className="font-semibold text-slate-600">B</span> {tooth.buccal.depth.join('-')} · <span className="font-semibold text-slate-600">L</span> {tooth.lingual.depth.join('-')}
         </div>
