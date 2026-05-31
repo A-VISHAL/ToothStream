@@ -17,6 +17,26 @@ describe('transcriptParser clinical intent routing', () => {
     expect(payload?.recession).toBe(2);
   });
 
+  it('routes modifier aliases through the clinical gate', () => {
+    const filter = evaluateClinicalSpeechIntent('vacation one', context);
+
+    expect(filter.shouldProcess).toBe(true);
+    expect(filter.aliasCandidate).toBe(true);
+    expect(filter.aliasCanonical).toBe('furcation');
+    expect(filter.reason).toBe('modifier alias detected');
+  });
+
+  it('normalizes resolution aliases into a parsable recession payload', () => {
+    const filter = evaluateClinicalSpeechIntent('resolution two', context);
+    const payload = parseTranscriptToPayload('resolution two', context);
+
+    expect(filter.shouldProcess).toBe(true);
+    expect(filter.aliasCandidate).toBe(true);
+    expect(filter.aliasCanonical).toBe('recession');
+    expect(filter.normalizedTranscript).toBe('recession two');
+    expect(payload?.recession).toBe(2);
+  });
+
   it.each([
     ['healthy', 'command'],
     ['bleeding', 'command'],
@@ -29,5 +49,14 @@ describe('transcriptParser clinical intent routing', () => {
 
     expect(filter.shouldProcess).toBe(true);
     expect(filter.intent).toBe(intent);
+  });
+
+  it('preserves inter proximal as a clinical alias candidate', () => {
+    const filter = evaluateClinicalSpeechIntent('inter proximal', context);
+
+    expect(filter.shouldProcess).toBe(true);
+    expect(filter.aliasCandidate).toBe(true);
+    expect(filter.aliasCanonical).toBe('interproximal');
+    expect(filter.normalizedTranscript).toBe('interproximal');
   });
 });

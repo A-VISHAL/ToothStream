@@ -2,6 +2,7 @@ import React, { createContext, useCallback, useEffect, useMemo, useRef, useState
 import { evaluateClinicalSpeechIntent, parseTranscriptToPayload } from './transcriptParser';
 import { useClinicalSoundManager, type ClinicalSoundTrigger, type ClinicalSoundType } from './useClinicalSoundManager';
 import { useDeepgramTranscription } from './useDeepgramTranscription';
+import { verifySuspiciousTranscriptWithWhisper } from './whisperVerification';
 import type {
   AiVerificationRecord,
   CommandFeedback,
@@ -772,7 +773,7 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
   const [currentSurface, setCurrentSurface] = useState<ToothSurface | null>('buccal');
   const [activeSiteIndex, setActiveSiteIndex] = useState<number | null>(0);
   const [transcripts, setTranscriptEntries] = useState<TranscriptEntry[]>([]);
-  const [aiVerificationRecords] = useState<AiVerificationRecord[]>([]);
+  const [aiVerificationRecords, setAiVerificationRecords] = useState<AiVerificationRecord[]>([]);
   const [teeth, setTeeth] = useState<Record<number, ToothState>>(createInitialTeethState);
   const [commandFeedback, setCommandFeedback] = useState<CommandFeedback | null>(null);
   const [soundEnabled, setSoundEnabled] = useState(true);
@@ -1054,6 +1055,137 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
       `score=${speechFilter.clinicalScore} intent=${speechFilter.intent} reason=${speechFilter.reason}`
     );
 
+    const commitParsedPayload = (parsedPayload: PerioPayload) => {
+      if (parsedPayload.tooth !== undefined && Array.isArray(parsedPayload.depth) && parsedPayload.depth.length === SITE_COUNT) {
+        flashFeedback({
+          kind: 'jump',
+          message: `COMMIT TO TOOTH ${parsedPayload.tooth}`,
+        });
+      } else if (parsedPayload.bleeding) {
+        flashFeedback({ kind: 'bleeding', message: 'BLEEDING SET' });
+      }
+
+      ingestPayload(
+        parsedPayload,
+        teeth,
+        setTeeth,
+        setTranscriptEntries,
+        setLatencyMs,
+        setLastPayload,
+        setCurrentTooth,
+        setCurrentSurface,
+        setActiveSiteIndex,
+        connectionState,
+        parserMode,
+        expectedInput,
+        lastPayload,
+        resolvedCurrentTooth,
+        resolvedCurrentSurface,
+        resolvedActiveSiteIndex,
+        updateActiveRef,
+        updateParserContext,
+        lastCommittedToothRef,
+        lastTripletContextRef,
+        implantContextActiveRef,
+        toothCommitPendingRef,
+        awaitingAdditionalFindingsRef,
+        logToothWorkflow,
+        historyStackRef,
+        flashFeedback,
+        playSound,
+        triggerClinicalSound,
+        pushDebugTimeline
+      );
+    };
+
+    if (speechFilter.aliasCandidate) {
+      void (async () => {
+        const audioChunks = transcription.getRecentAudioChunks();
+        const suspiciousReasons = [speechFilter.reason, speechFilter.aliasCanonical ? `alias:${speechFilter.aliasCanonical}` : 'alias_candidate'].filter(Boolean);
+
+        console.info('LIVE_WHISPER_CALL', {
+          transcript: latestFinal.text.trim(),
+          suspiciousReasons,
+          audioChunks: audioChunks.length,
+          aliasCanonical: speechFilter.aliasCanonical ?? null,
+        });
+
+        const verification = await verifySuspiciousTranscriptWithWhisper({
+          audioChunks,
+          originalTranscript: latestFinal.text.trim(),
+          suspiciousReasons,
+          currentTooth: resolvedCurrentTooth,
+          lastCommittedTooth: lastCommittedToothRef.current,
+          currentSurface: resolvedCurrentSurface,
+          lastTripletContext: lastTripletContextRef.current,
+          recentTranscriptHistory: transcripts.slice(0, 5).map((entry) => ({
+            text: entry.text,
+            timestamp: entry.timestamp,
+            source: entry.source,
+          })),
+          parsedFindings: lastPayload ? [JSON.stringify(lastPayload)] : [],
+          knownDentalTerms: ['recession', 'furcation', 'bleeding', 'implant', 'healthy', 'mobility', 'exudate', 'interproximal'],
+        });
+        const verificationDecision: AiVerificationRecord['decision'] = verification.aiVerified ? 'whisper' : 'no_decision';
+
+        console.info('LIVE_DEEPSEEK_CALL', {
+          originalTranscript: verification.originalTranscript,
+          whisperTranscript: verification.whisperTranscript,
+          correctedTranscript: verification.correctedTranscript,
+          aiVerified: verification.aiVerified,
+        });
+
+        setAiVerificationRecords((previous) => [
+          {
+            id: `ai-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            timestamp: Date.now(),
+            originalTranscript: verification.originalTranscript,
+            whisperTranscript: verification.whisperTranscript,
+            correctedTranscript: verification.correctedTranscript,
+            confidence: verification.confidence,
+            reasoning: verification.reasoning,
+            aiVerified: verification.aiVerified,
+            suspiciousReasons: verification.suspiciousReasons,
+            decision: verificationDecision,
+          },
+          ...previous,
+        ].slice(0, 12));
+
+        const correctedPayload = parseTranscriptToPayload(verification.correctedTranscript, {
+          mode: parserMode,
+          expectedInput,
+          currentTooth: resolvedCurrentTooth,
+          currentSurface: resolvedCurrentSurface,
+        });
+
+        if (correctedPayload) {
+          commitParsedPayload(correctedPayload);
+        } else {
+          setTranscriptEntries((previous) => {
+            const nextEntry = {
+              id: `socket-correction-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+              text: verification.correctedTranscript.trim() || latestFinal.text.trim(),
+              timestamp: Date.now(),
+              source: 'deepgram' as const,
+              isFinal: true,
+            };
+
+            return [nextEntry, ...previous].slice(0, 12);
+          });
+        }
+
+        console.info('CORRECTION_PIPELINE_COMPLETE', {
+          transcript: latestFinal.text.trim(),
+          whisperTranscript: verification.whisperTranscript,
+          correctedTranscript: verification.correctedTranscript,
+          aiVerified: verification.aiVerified,
+          chartCommitted: Boolean(correctedPayload),
+        });
+      })();
+
+      return;
+    }
+
     if (!speechFilter.shouldProcess) {
       setTranscriptEntries((previous) => {
         const nextEntry = {
@@ -1191,50 +1323,12 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    if (payload.tooth !== undefined && Array.isArray(payload.depth) && payload.depth.length === SITE_COUNT) {
-      flashFeedback({
-        kind: 'jump',
-        message: `COMMIT TO TOOTH ${payload.tooth}`,
-      });
-    } else if (payload.bleeding) {
-      flashFeedback({ kind: 'bleeding', message: 'BLEEDING SET' });
-    }
-
-    ingestPayload(
-      payload,
-      teeth,
-      setTeeth,
-      setTranscriptEntries,
-      setLatencyMs,
-      setLastPayload,
-      setCurrentTooth,
-      setCurrentSurface,
-      setActiveSiteIndex,
-      connectionState,
-      parserMode,
-      expectedInput,
-      lastPayload,
-      resolvedCurrentTooth,
-      resolvedCurrentSurface,
-      resolvedActiveSiteIndex,
-      updateActiveRef,
-      updateParserContext,
-      lastCommittedToothRef,
-      lastTripletContextRef,
-      implantContextActiveRef,
-      toothCommitPendingRef,
-      awaitingAdditionalFindingsRef,
-      logToothWorkflow,
-      historyStackRef,
-      flashFeedback,
-      playSound,
-      triggerClinicalSound,
-      pushDebugTimeline
-    );
+    commitParsedPayload(payload);
   }, [
     setTeeth,
     teeth,
     transcription.segments,
+    transcription.getRecentAudioChunks,
     connectionState,
     parserMode,
     expectedInput,

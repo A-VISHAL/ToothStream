@@ -21,6 +21,8 @@ export interface ClinicalSpeechFilterResult {
   intent: ClinicalIntent;
   shouldProcess: boolean;
   reason: string;
+  aliasCandidate?: boolean;
+  aliasCanonical?: string;
 }
 
 const NUMBER_WORDS: Record<string, number> = {
@@ -87,6 +89,11 @@ const CLINICAL_KEYWORDS = new Set([
 ]);
 
 const NAVIGATION_ALIAS_REGEX = /^(jump|go|select|move)\s+to\s+(.+)$/i;
+const MODIFIER_ALIAS_PATTERNS = [
+  { pattern: /\bresolution\b/i, canonical: 'recession' },
+  { pattern: /\bvacation\b/i, canonical: 'furcation' },
+  { pattern: /\binter\s+proximal\b/i, canonical: 'interproximal' },
+];
 function normalizeWord(word: string): string {
   return HOMOPHONE_NORMALIZATIONS[word.toLowerCase()] ?? word.toLowerCase();
 }
@@ -130,6 +137,25 @@ function normalizeSurfaceAlias(transcript: string): { normalized: string; surfac
   return {
     normalized: cleaned,
     surfaceMatch: false,
+  };
+}
+
+function normalizeModifierAlias(transcript: string): { normalized: string; aliasMatch: boolean; canonical?: string } {
+  const cleaned = transcript.trim();
+
+  for (const alias of MODIFIER_ALIAS_PATTERNS) {
+    if (alias.pattern.test(cleaned)) {
+      return {
+        normalized: cleaned.replace(alias.pattern, alias.canonical),
+        aliasMatch: true,
+        canonical: alias.canonical,
+      };
+    }
+  }
+
+  return {
+    normalized: transcript,
+    aliasMatch: false,
   };
 }
 
@@ -249,10 +275,11 @@ function detectClinicalSpeechIntent(transcript: string, context?: TranscriptPars
   const cleaned = transcript.trim();
   const navigationAlias = normalizeNavigationAlias(cleaned);
   const surfaceAlias = normalizeSurfaceAlias(cleaned);
+  const modifierAlias = normalizeModifierAlias(cleaned);
   const explicitNavigationIntent = navigationAlias.navigationMatch || /\btooth\b/i.test(cleaned);
   const protectedTriplet = parseProtectedDepthTriplet(cleaned, context);
   const standaloneTriplet = isStandaloneDepthTriplet(tokenizeRaw(cleaned));
-  const normalizedTranscript = normalizeClinicalTranscript(cleaned, explicitNavigationIntent && !protectedTriplet);
+  const normalizedTranscript = normalizeClinicalTranscript(modifierAlias.normalized, explicitNavigationIntent && !protectedTriplet);
   const tokens = tokenize(normalizedTranscript);
   const command = detectCommand(tokens);
   const explicitTooth = tokens.includes('tooth');
@@ -271,6 +298,30 @@ function detectClinicalSpeechIntent(transcript: string, context?: TranscriptPars
       intent: 'none',
       shouldProcess: false,
       reason: 'empty transcript',
+    };
+  }
+
+  if (modifierAlias.aliasMatch) {
+    console.info('LIVE_MODIFIER_ENTER', {
+      transcript: cleaned,
+      canonical: modifierAlias.canonical,
+    });
+    console.info('CLINICAL_ALIAS_CANDIDATE', {
+      transcript: cleaned,
+      canonical: modifierAlias.canonical,
+      normalizedTranscript,
+    });
+
+    return {
+      normalizedTranscript,
+      navigationMatch: navigationAlias.navigationMatch,
+      surfaceMatch: surfaceAlias.surfaceMatch || surface !== undefined,
+      clinicalScore: 2,
+      intent: 'keyword',
+      shouldProcess: true,
+      reason: 'modifier alias detected',
+      aliasCandidate: true,
+      aliasCanonical: modifierAlias.canonical,
     };
   }
 
@@ -521,6 +572,18 @@ export function parseTranscriptToPayload(transcript: string, context?: Transcrip
     return null;
   }
 
+  if (filter.aliasCandidate) {
+    console.info('BRIDGE_ALIAS_DETECTED', {
+      transcript,
+      canonical: filter.aliasCanonical ?? null,
+      normalizedTranscript: filter.normalizedTranscript,
+    });
+    console.info('LIVE_WHISPER_TRIGGER', {
+      transcript,
+      canonical: filter.aliasCanonical ?? null,
+    });
+  }
+
   const cleaned = transcript.trim();
   const normalizedTranscript = filter.normalizedTranscript;
   const tokens = tokenize(normalizedTranscript);
@@ -584,6 +647,14 @@ export function parseTranscriptToPayload(transcript: string, context?: Transcrip
   console.info('WAITING_FOR_FINDINGS', awaitingAdditionalFindings);
   console.info('TOOTH_FINALIZED', toothFinalized);
   console.info('AUTO_ADVANCE_ALLOWED', autoAdvanceAllowed);
+
+  if (filter.aliasCandidate) {
+    console.info('LIVE_DEEPSEEK_TRIGGER', {
+      transcript: cleaned,
+      canonical: filter.aliasCanonical ?? null,
+      normalizedTranscript,
+    });
+  }
 
   if (
     command === undefined &&
