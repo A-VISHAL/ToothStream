@@ -765,6 +765,7 @@ function snapshotChartState(
 
 export function WebSocketProvider({ children }: { children: React.ReactNode }) {
   const transcription = useDeepgramTranscription();
+  const { segments: transcriptionSegments, getRecentAudioChunks } = transcription;
   const [connectionState, setConnectionState] = useState<PerioChartContextValue['connectionState']>('disconnected');
   const [socketUrl] = useState(transcription.socketUrl);
   const [latencyMs, setLatencyMs] = useState<number | null>(null);
@@ -987,13 +988,13 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
   }, [transcription.connectionState]);
 
   useEffect(() => {
-    if (transcription.segments.length === 0 && !transcription.isRecording) {
+    if (transcriptionSegments.length === 0 && !transcription.isRecording) {
       processedTranscriptIdsRef.current = new Set();
     }
-  }, [transcription.isRecording, transcription.segments.length]);
+  }, [transcription.isRecording, transcriptionSegments.length]);
 
   useEffect(() => {
-    const latestFinal = transcription.segments.find((segment) => segment.isFinal && !processedTranscriptIdsRef.current.has(segment.id));
+    const latestFinal = transcriptionSegments.find((segment) => segment.isFinal && !processedTranscriptIdsRef.current.has(segment.id));
 
     if (!latestFinal) {
       return;
@@ -1100,7 +1101,7 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
 
     if (speechFilter.aliasCandidate) {
       void (async () => {
-        const audioChunks = transcription.getRecentAudioChunks();
+        const audioChunks = getRecentAudioChunks();
         const suspiciousReasons = [speechFilter.reason, speechFilter.aliasCanonical ? `alias:${speechFilter.aliasCanonical}` : 'alias_candidate'].filter(Boolean);
 
         console.info('LIVE_WHISPER_CALL', {
@@ -1327,8 +1328,9 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
   }, [
     setTeeth,
     teeth,
-    transcription.segments,
-    transcription.getRecentAudioChunks,
+    transcriptionSegments,
+    getRecentAudioChunks,
+    transcripts,
     connectionState,
     parserMode,
     expectedInput,

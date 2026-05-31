@@ -81,42 +81,6 @@ function buildWavBlob(audioChunks: ArrayBuffer[]): Blob | null {
   });
 }
 
-function extractTranscriptFromResponse(responseBody: unknown): string {
-  if (!responseBody || typeof responseBody !== 'object') {
-    return '';
-  }
-
-  const record = responseBody as Record<string, unknown>;
-
-  if (typeof record.text === 'string') {
-    return record.text;
-  }
-
-  if (typeof record.transcript === 'string') {
-    return record.transcript;
-  }
-
-  if (Array.isArray(record.data)) {
-    for (const entry of record.data) {
-      if (typeof entry === 'string') {
-        return entry;
-      }
-
-      if (entry && typeof entry === 'object') {
-        const nested = entry as Record<string, unknown>;
-        if (typeof nested.text === 'string') {
-          return nested.text;
-        }
-        if (typeof nested.transcript === 'string') {
-          return nested.transcript;
-        }
-      }
-    }
-  }
-
-  return '';
-}
-
 export async function verifySuspiciousTranscriptWithWhisper(
   input: WhisperVerificationInput
 ): Promise<WhisperVerificationResult> {
@@ -185,7 +149,6 @@ export async function verifySuspiciousTranscriptWithWhisper(
     const responseBody = (await response.json()) as unknown;
     // backend returns { whisperTranscript, confidence, status }
     const whisperTranscript = (responseBody && typeof responseBody === 'object' && (responseBody as any).whisperTranscript) ? String((responseBody as any).whisperTranscript).trim() : '';
-    const confidence = (responseBody && typeof responseBody === 'object' && typeof (responseBody as any).confidence === 'number') ? (responseBody as any).confidence : 0;
 
     console.info('WHISPER_TRANSCRIPT', {
       whisperTranscript,
