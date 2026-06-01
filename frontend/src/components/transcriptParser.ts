@@ -687,7 +687,7 @@ export function parseTranscriptToPayload(transcript: string, context?: Transcrip
   const healthy = command === 'healthy' || /\bhealthy\b/i.test(normalizedTranscript);
   const mobilityClass = tokens.includes('mobility') ? extractClassValue(tokens) ?? true : undefined;
   const furcationClass = tokens.includes('furcation') ? extractClassValue(tokens) ?? true : undefined;
-  const chartStatus = command === 'open' ? 'open' : command === 'charted' ? 'charted' : depth !== undefined || bleeding || missing || implant || healthy || recession !== undefined || mobilityClass !== undefined || furcationClass !== undefined ? 'charted' : undefined;
+  const chartStatus: 'open' | 'charted' | undefined = command === 'open' ? 'open' : command === 'charted' ? 'charted' : depth !== undefined || bleeding || missing || implant || healthy || recession !== undefined || mobilityClass !== undefined || furcationClass !== undefined ? 'charted' : undefined;
   const toothFindingSignal = bleeding || missing || implant || healthy || recession !== undefined || mobilityClass !== undefined || furcationClass !== undefined || chartStatus !== undefined || surface !== undefined || siteIndex !== undefined;
   const tooth = extractedTooth ?? (toothFindingSignal ? context?.currentTooth ?? undefined : undefined);
   const explicitAdvance = command === 'next' || command === 'previous' || command === 'skip' || command === 'resume' || missing;
