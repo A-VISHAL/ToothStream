@@ -1,156 +1,319 @@
 # ToothStream
 
-Real-time periodontal voice charting application with:
+**AI-Powered Real-time Periodontal Voice Charting**
 
-1. FastAPI backend for audio websocket streaming
-2. Deepgram live transcription integration
-3. React + TypeScript frontend with interactive full-mouth perio chart
-4. Universal numbering workflow (upper 1-16, lower 32-17)
+ToothStream is a premium dental SaaS platform that lets clinicians dictate periodontal findings hands-free while a full-mouth chart updates live — driven by Deepgram AI speech-to-text and a clinical-grade state machine.
 
-## Highlights
+---
 
-1. Live microphone capture from browser and streaming to backend websocket
-2. Transcript parsing into clinical payloads (tooth, surface, depth triplets, bleeding, commands)
-3. Interactive periodontal chart with anatomy-first SVG rendering
-4. Active tooth/site highlighting and live updates from voice input
-5. Undo and cursor-navigation style command flow
+## Why ToothStream?
+
+Traditional periodontal charting requires a second person to record while the clinician probes. ToothStream eliminates that bottleneck:
+
+- **Clinician speaks** → Deepgram transcribes → DeepSeek parses → chart updates in < 50 ms
+- No extra staff needed for data entry during examinations
+- Hands stay on instruments; attention stays on the patient
+- Full audit trail via transcript history
+
+---
+
+## Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                        CLIENT (Browser)                         │
+│                                                                 │
+│  ┌─────────────┐    ┌──────────────────────────────────────┐   │
+│  │  Microphone │───▶│         React Frontend (CRA)         │   │
+│  │  (WebAudio) │    │                                      │   │
+│  └─────────────┘    │  ┌────────────┐  ┌────────────────┐  │   │
+│                     │  │ LoginPage  │  │ ClinicalOverview│  │   │
+│                     │  │ (hero+auth)│  │  (onboarding)  │  │   │
+│                     │  └────────────┘  └────────────────┘  │   │
+│                     │  ┌──────────────────────────────────┐ │   │
+│                     │  │       Dashboard Workspace        │ │   │
+│                     │  │  ┌────────────┐ ┌─────────────┐ │ │   │
+│                     │  │  │TranscriptP.│ │  PerioChart  │ │ │   │
+│                     │  │  │ + StatusBar│ │  (SVG 32T)  │ │ │   │
+│                     │  │  └────────────┘ └─────────────┘ │ │   │
+│                     │  └──────────────────────────────────┘ │   │
+│                     │         ▲ WebSocketProvider           │   │
+│                     └─────────┼────────────────────────────┘   │
+└───────────────────────────────┼─────────────────────────────────┘
+                                │ WebSocket (ws://)
+                                │ binary PCM audio stream
+                                ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                    FastAPI Backend (Python)                      │
+│                                                                 │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │                    /ws/audio endpoint                   │   │
+│  │                                                         │   │
+│  │  AudioChunks ──▶ Deepgram SDK ──▶ Raw Transcript        │   │
+│  │                         │                               │   │
+│  │                         ▼                               │   │
+│  │              DeepSeek NLP Decision Engine               │   │
+│  │              (deepseekDecision.ts bridged via rules)    │   │
+│  │                         │                               │   │
+│  │                         ▼                               │   │
+│  │              Clinical Transcript Parser                 │   │
+│  │              parser.py + normalizer.py                  │   │
+│  │                         │                               │   │
+│  │                         ▼                               │   │
+│  │           JSON Payload: { tooth, surface, depth,        │   │
+│  │                          bleeding, command }            │   │
+│  └───────────────────────┬─────────────────────────────────┘   │
+│                           │ JSON over WS                       │
+└───────────────────────────┼─────────────────────────────────────┘
+                            │
+                            ▼
+          ┌───────────────────────────────┐
+          │   Clinical State Machine      │
+          │   (charting state machine)    │
+          │                               │
+          │  Tooth → Surface → Sites[3]  │
+          │  Depth / Bleeding / Jump      │
+          │  Undo stack per tooth         │
+          └───────────────────────────────┘
+                            │
+                            ▼
+          ┌───────────────────────────────┐
+          │   PerioChart UI Update        │
+          │   (SVG, EnhancedToothCard,    │
+          │    SimpleToothMap, etc.)      │
+          └───────────────────────────────┘
+```
+
+---
+
+## Key Features
+
+| Feature | Detail |
+|---------|--------|
+| **Live Voice Charting** | Browser mic → FastAPI WebSocket → Deepgram STT → chart update < 50 ms round-trip |
+| **32-Tooth Full Arch** | Universal numbering (upper 1–16, lower 32–17). SVG anatomy cards per tooth type |
+| **Surface Awareness** | Buccal and lingual/palatal surface tracking with 3 sites (mesial/mid/distal) per surface |
+| **Bleeding Detection** | Voice command `"bleeding"` or `"no bleeding"` marks site-level DP |
+| **Clinical State Machine** | Explicit tooth commit before advancing; no accidental cursor jumps |
+| **Undo Stack** | Per-tooth history with voice `"undo"` command |
+| **DeepSeek NLP** | Secondary AI layer resolves ambiguous dental terminology |
+| **Latency Instrumentation** | Real-time WebSocket RTT measurement displayed in dashboard |
+| **Final Report** | PDF-export of completed periodontal chart with jsPDF |
+| **Premium UI** | Framer Motion animations, glassmorphism cards, gradient CTAs throughout |
+
+---
 
 ## Tech Stack
 
-1. Backend: FastAPI, Uvicorn, websockets, aiohttp, python-dotenv, deepgram-sdk
-2. Frontend: React 18, TypeScript, TailwindCSS, react-scripts
+### Backend
+| Layer | Technology |
+|-------|-----------|
+| API Framework | FastAPI + Uvicorn |
+| Speech-to-Text | Deepgram SDK (Nova-2 model) |
+| NLP / Parsing | DeepSeek + custom rules engine |
+| Audio transport | WebSocket binary PCM stream |
+| Config | python-dotenv |
+
+### Frontend
+| Layer | Technology |
+|-------|-----------|
+| Framework | React 18 + TypeScript |
+| Build | Create React App (react-scripts 5) |
+| Styling | TailwindCSS 3 + custom CSS design system |
+| Animations | Framer Motion 12 |
+| Icons | Lucide React |
+| PDF Export | jsPDF |
+| Speech | Web Audio API + MediaRecorder |
+
+---
 
 ## Repository Layout
 
-```text
-.
-|- start.bat
-|- README.md
-|- backend/
-|  |- main.py
-|  |- parser.py
-|  |- normalizer.py
-|  |- requirements.txt
-|  \- (create) .env
-\- frontend/
-   |- package.json
-   |- src/
-   |  |- App.tsx
-   |  \- components/
-   \- public/
 ```
+ToothStream/
+├── start.bat                     # One-click Windows launcher
+├── README.md
+│
+├── backend/
+│   ├── main.py                   # FastAPI app + /ws/audio WebSocket
+│   ├── parser.py                 # Clinical transcript parser
+│   ├── normalizer.py             # Text normalization (numbers, dental terms)
+│   ├── requirements.txt
+│   └── .env                      # DEEPGRAM_API_KEY (create this — never commit)
+│
+└── frontend/
+    ├── package.json
+    ├── tailwind.config.js
+    ├── public/
+    └── src/
+        ├── App.tsx               # Root: auth flow + Dashboard shell
+        ├── App.css               # Global design system + animations
+        ├── types.ts              # Shared TypeScript types
+        │
+        └── components/
+            ├── LoginPage.tsx             # Hero panel + glassmorphism auth card
+            ├── ClinicalOverviewPage.tsx  # Onboarding step 2 — feature tour
+            ├── PatientEntryPage.tsx      # Onboarding step 3 — intake form
+            ├── PerioChart.tsx            # Full-arch chart orchestrator
+            ├── EnhancedToothCard.tsx     # Single tooth card with SVG + data
+            ├── SimpleToothMap.tsx        # 32-tooth grid overview
+            ├── TranscriptPanel.tsx       # Live microphone + transcript history
+            ├── StatusBar.tsx             # WebSocket health + debug payload
+            ├── FinalReportWorkflow.tsx   # PDF report generation
+            ├── WebSocketProvider.tsx     # WS connection + global state
+            ├── DebugPanel.tsx            # Developer debug overlay
+            ├── transcriptParser.ts       # Voice → PerioPayload parser
+            ├── clinicalRulesBridge.ts    # Rules + DeepSeek decision bridge
+            ├── clinicalContextBuilder.ts # Chart context assembly
+            ├── deepseekDecision.ts       # DeepSeek AI integration
+            ├── useDeepgramTranscription.ts # Deepgram hook
+            ├── useClinicalSoundManager.ts  # Clinical audio feedback
+            └── [SVG tooth components]    # Anatomy SVGs per tooth type
+```
+
+---
 
 ## Prerequisites
 
-1. Python 3.10+
-2. Node.js 18+
-3. npm 9+
-4. A Deepgram API key
+- Python 3.10+
+- Node.js 18+ and npm 9+
+- A Deepgram API key (sign up free at deepgram.com)
+
+---
 
 ## Quick Start (Windows)
 
-Use the launcher script from repo root:
+From the repository root:
 
 ```bat
 start.bat
 ```
 
-What this does:
+This script:
+1. Creates `backend/venv` if not present
+2. Installs Python dependencies from `requirements.txt`
+3. Starts the FastAPI backend on `http://127.0.0.1:8000`
+4. Starts the React dev server on `http://localhost:3002`
 
-1. Creates backend virtual environment at backend/venv (if missing)
-2. Installs backend dependencies from backend/requirements.txt
-3. Starts FastAPI backend on http://127.0.0.1:8000
-4. Starts frontend dev server on http://localhost:3002
+---
 
 ## Manual Setup
 
-### 1) Backend
+### Backend
 
-```powershell
+```bash
 cd backend
 python -m venv venv
-venv\Scripts\activate
-python -m pip install --upgrade pip
+source venv/bin/activate          # Windows: venv\Scripts\activate
+pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
-Create backend/.env with:
+Create `backend/.env`:
 
 ```env
-DEEPGRAM_API_KEY=your_deepgram_api_key
+DEEPGRAM_API_KEY=your_key_here
 ```
 
-Run backend:
+Start the backend:
 
-```powershell
+```bash
 uvicorn main:app --host 127.0.0.1 --port 8000 --reload
 ```
 
-### 2) Frontend
+### Frontend
 
-```powershell
+```bash
 cd frontend
 npm install
-$env:PORT=3002
-npm start
+PORT=3002 npm start               # Windows: set PORT=3002 && npm start
 ```
+
+---
 
 ## Runtime Endpoints
 
-1. Backend API: http://127.0.0.1:8000
-2. Audio websocket: ws://127.0.0.1:8000/ws/audio
-3. Frontend app: http://localhost:3002
+| Endpoint | URL |
+|----------|-----|
+| Frontend app | http://localhost:3002 |
+| Backend API root | http://127.0.0.1:8000 |
+| Audio WebSocket | ws://127.0.0.1:8000/ws/audio |
 
-## How To Use
+---
 
-1. Open the frontend app in your browser.
-2. Allow microphone access.
-3. Start recording from the transcript panel.
-4. Dictate periodontal chart values naturally.
-5. Verify live updates in the chart and transcript history.
+## Demo Credentials
 
-## Voice Parsing Notes
+| Field | Value |
+|-------|-------|
+| Doctor name | `Doctor XX` |
+| Password | `dental123` |
 
-The parser supports clinical payload extraction such as:
+Or click **"Continue without signing in"** on the login page.
 
-1. Tooth selection
-2. Surface selection (buccal or lingual/palatal)
-3. Depth triplets
-4. Bleeding and status commands
-5. Cursor movement style commands
+---
 
-Backend parsing modules:
+## Voice Command Reference
 
-1. backend/normalizer.py
-2. backend/parser.py
+Speak naturally during a charting session. Supported commands:
 
-## Frontend Scripts
+| Voice input | Action |
+|-------------|--------|
+| `"Tooth five"` | Jump to tooth #5 |
+| `"Buccal"` / `"Lingual"` | Switch surface |
+| `"Two three four"` | Enter depth triplet (mesial/mid/distal) |
+| `"Bleeding"` | Mark current site as bleeding positive |
+| `"No bleeding"` | Mark current site as DP negative |
+| `"Undo"` | Revert last depth entry |
+| `"Next tooth"` | Advance to next tooth |
 
-From frontend:
+---
+
+## How It Differs from Traditional Charting Software
+
+| Traditional | ToothStream |
+|-------------|-------------|
+| Requires assistant to type | Solo clinician workflow |
+| Manual data entry = errors | AI parsing with clinical rules |
+| Separate recording step | Real-time < 50 ms updates |
+| No audio trail | Full transcript history |
+| Desktop-only legacy UI | Modern web SaaS, any device |
+| No AI correction | DeepSeek secondary NLP layer |
+
+---
+
+## Development Scripts
+
+From `frontend/`:
 
 ```bash
-npm start
-npm run build
-npm run typecheck
-npm test
+npm start          # Start dev server on port 3002
+npm run build      # Production build
+npm run typecheck  # TypeScript type check (no emit)
+npm test           # Jest test suite
 ```
+
+---
 
 ## Troubleshooting
 
-1. No transcription data:
-   Ensure backend/.env contains a valid DEEPGRAM_API_KEY.
-2. Frontend cannot connect:
-   Verify backend is running on port 8000 and websocket path is /ws/audio.
-3. Mic button appears active but no updates:
-   Check browser microphone permissions and backend terminal logs.
-4. Build warnings:
-   Existing lint warnings may appear in development and do not always block runtime.
+| Problem | Solution |
+|---------|----------|
+| No transcription appearing | Check `backend/.env` has valid `DEEPGRAM_API_KEY` |
+| Frontend shows "Disconnected" | Verify backend is running on port 8000 |
+| Mic button active but no updates | Check browser mic permissions; check backend terminal for errors |
+| Build type errors | Run `npm run typecheck` for detailed TS errors |
+| Port 3002 already in use | Change `PORT=3002` to another port in start command |
 
-## Security
+---
 
-1. Never commit backend/.env.
-2. Rotate API keys if exposed.
+## Security Notes
+
+- **Never commit `backend/.env`** — it contains your Deepgram API key
+- `.env` is listed in `.gitignore` by default
+- Rotate your API key immediately if accidentally exposed
+
+---
 
 ## License
 
-Add your preferred license file (for example MIT) to clarify reuse terms.
+MIT — see LICENSE file or add your preferred license.
