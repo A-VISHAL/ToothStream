@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
-import { HeartPulse, Lock, ShieldCheck, User } from 'lucide-react';
+import { HeartPulse, Lock, ShieldCheck, User, Mic, Activity, Stethoscope } from 'lucide-react';
 
 interface LoginPageProps {
   onSignIn: (doctorName: string, remember?: boolean) => void;
@@ -10,33 +10,134 @@ interface LoginPageProps {
 const DEFAULT_DOCTOR_NAME = 'Doctor XX';
 const DEFAULT_PASSWORD = 'dental123';
 
-function ClinicBackdrop() {
+function VoiceWaveform() {
+  const amps = [0.4, 0.7, 0.5, 0.9, 0.6, 1.0, 0.5, 0.8, 0.55, 0.95, 0.4, 0.75, 0.85, 0.5, 1.0, 0.6, 0.7, 0.4, 0.9, 0.55];
   return (
-    <div className="hospital-auth-backdrop" aria-hidden="true">
-      <div className="hospital-auth-glow hospital-auth-glow-left" />
-      <div className="hospital-auth-glow hospital-auth-glow-right" />
+    <div className="lp-waveform" aria-hidden="true">
+      {amps.map((amp, i) => (
+        <motion.span
+          key={i}
+          className="lp-wave-bar"
+          animate={{ scaleY: [amp * 0.5, amp, amp * 0.35, amp * 0.78, amp * 0.5] }}
+          transition={{ duration: 2.1, repeat: Infinity, delay: i * 0.09, ease: 'easeInOut' }}
+        />
+      ))}
     </div>
   );
 }
 
-function ClinicalBrandPanel() {
+function AIOrb() {
   return (
-    <section className="hospital-auth-brand-panel" aria-label="Product summary">
-      <div className="hospital-auth-brand-kicker">Dental Voice Charting AI</div>
-      <h2 className="hospital-auth-brand-title">AI-powered periodontal charting for clinical workflow.</h2>
-      <p className="hospital-auth-brand-line">Designed to fit daily clinical practice—fast, accurate, and calm.</p>
+    <div className="lp-orb-wrap" aria-hidden="true">
+      <motion.div
+        className="lp-orb-ring lp-orb-ring-outer"
+        animate={{ scale: [1, 1.4, 1], opacity: [0.5, 0, 0.5] }}
+        transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
+      />
+      <motion.div
+        className="lp-orb-ring lp-orb-ring-mid"
+        animate={{ scale: [1, 1.7, 1], opacity: [0.22, 0, 0.22] }}
+        transition={{ duration: 3, repeat: Infinity, delay: 0.55, ease: 'easeInOut' }}
+      />
+      <motion.div
+        className="lp-orb-core"
+        animate={{ y: [0, -10, 0] }}
+        transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }}
+      >
+        <Mic className="w-9 h-9 text-white" strokeWidth={1.8} />
+      </motion.div>
+    </div>
+  );
+}
 
-      <div className="hospital-auth-chip-row">
-        <span className="hospital-auth-chip">Voice ready</span>
-        <span className="hospital-auth-chip">Parser active</span>
-        <span className="hospital-auth-chip">Secure access</span>
+function HeroStatCard({
+  icon: Icon,
+  value,
+  label,
+  delay,
+}: {
+  icon: React.ElementType;
+  value: string;
+  label: string;
+  delay: number;
+}) {
+  return (
+    <motion.div
+      className="lp-stat-card"
+      initial={{ opacity: 0, y: 18 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.55, delay, ease: 'easeOut' }}
+    >
+      <span className="lp-stat-icon-wrap">
+        <Icon className="w-4 h-4" strokeWidth={2} />
+      </span>
+      <div className="lp-stat-text">
+        <p className="lp-stat-value">{value}</p>
+        <p className="lp-stat-label">{label}</p>
       </div>
-      {/* Minimal professional illustration */}
-      <svg width="160" height="48" viewBox="0 0 160 48" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ marginTop: 14 }} aria-hidden>
-        <rect x="0" y="0" width="160" height="48" rx="6" fill="rgba(14,165,233,0.04)" />
-        <path d="M8 30 L24 18 L32 30 L40 14 L48 30 L56 26 L64 30 L72 20 L80 30 L88 16 L96 30 L104 22 L112 30 L120 18 L128 30" stroke="#06b6d4" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-      </svg>
-    </section>
+    </motion.div>
+  );
+}
+
+function HeroPanel() {
+  return (
+    <div className="lp-hero" aria-label="Product overview">
+      <div className="lp-hero-bg-1" />
+      <div className="lp-hero-bg-2" />
+      <div className="lp-hero-grid" />
+
+      <div className="lp-hero-inner">
+        <motion.span
+          className="lp-kicker"
+          initial={{ opacity: 0, y: -14 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.1 }}
+        >
+          <span className="lp-kicker-dot" />
+          AI-Powered · Clinical Grade · Real-time
+        </motion.span>
+
+        <motion.h1
+          className="lp-hero-headline"
+          initial={{ opacity: 0, y: 28 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.65, delay: 0.2, ease: [0.16, 1, 0.3, 1] }}
+        >
+          AI-Powered<br />
+          <span className="lp-headline-accent">Periodontal</span><br />
+          Charting
+        </motion.h1>
+
+        <motion.p
+          className="lp-hero-sub"
+          initial={{ opacity: 0, y: 18 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6, delay: 0.3 }}
+        >
+          Real-time voice charting for modern dental practices.
+        </motion.p>
+
+        <motion.div
+          className="lp-visual"
+          initial={{ opacity: 0, scale: 0.88 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.7, delay: 0.4 }}
+        >
+          <AIOrb />
+          <VoiceWaveform />
+          <p className="lp-live-tag">
+            <span className="lp-live-dot" />
+            Live transcription active
+          </p>
+        </motion.div>
+
+        <div className="lp-stats">
+          <HeroStatCard icon={Activity} value="< 50ms" label="Chart latency" delay={0.55} />
+          <HeroStatCard icon={Stethoscope} value="32 Teeth" label="Full arch" delay={0.65} />
+          <HeroStatCard icon={ShieldCheck} value="HIPAA" label="Ready" delay={0.75} />
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -45,96 +146,131 @@ export function LoginPage({ onSignIn, onPass }: LoginPageProps) {
   const [password, setPassword] = useState(DEFAULT_PASSWORD);
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [focused, setFocused] = useState<string | null>(null);
 
-  const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const trimmedDoctorName = doctorName.trim();
-    const trimmedPassword = password.trim();
-    const isValid = trimmedDoctorName === DEFAULT_DOCTOR_NAME && trimmedPassword === DEFAULT_PASSWORD;
-    if (!isValid) {
-      setError('Invalid credentials');
+  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const name = doctorName.trim();
+    const pass = password.trim();
+    if (name !== DEFAULT_DOCTOR_NAME || pass !== DEFAULT_PASSWORD) {
+      setError('Invalid credentials — use: Doctor XX / dental123');
       return;
     }
     setIsSubmitting(true);
     setError(null);
-    onSignIn(trimmedDoctorName);
+    setTimeout(() => onSignIn(name), 700);
   };
 
   return (
-    <div className="app-shell hospital-auth-shell">
-      <ClinicBackdrop />
+    <div className="lp-shell">
+      <div className="lp-ambient" aria-hidden="true">
+        <div className="lp-ambient-1" />
+        <div className="lp-ambient-2" />
+      </div>
 
-      <motion.div
-        className="hospital-auth-page"
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.25, ease: 'easeOut' }}
-      >
-        <div className="hospital-auth-layout">
-          <ClinicalBrandPanel />
+      <div className="lp-layout">
+        <HeroPanel />
 
-          <div className="hospital-auth-card">
-            <div className="hospital-auth-header">
-              <span className="hospital-auth-badge">
-                <HeartPulse className="h-4 w-4" strokeWidth={2.2} />
-                Clinical access
+        <motion.div
+          className="lp-auth-pane"
+          initial={{ opacity: 0, y: 22 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.2, ease: 'easeOut' }}
+        >
+          <div className="lp-auth-card">
+            <div className="lp-auth-header">
+              <span className="lp-auth-badge">
+                <HeartPulse className="h-3.5 w-3.5" strokeWidth={2.2} />
+                Clinical Access
               </span>
-              <h1 className="hospital-auth-title">Secure clinician access</h1>
-              <p className="hospital-auth-subtitle">Sign in to continue.</p>
+              <h2 className="lp-auth-title">Welcome back</h2>
+              <p className="lp-auth-subtitle">Sign in to your clinical workspace</p>
             </div>
 
-            <form className="hospital-auth-form" onSubmit={handleSubmit}>
-              <label className="hospital-auth-field">
-                <span className="hospital-auth-label">Doctor name</span>
-                <div className="hospital-auth-input-shell">
-                  <User className="hospital-auth-input-icon" strokeWidth={2} aria-hidden />
+            <form onSubmit={handleSubmit} className="lp-form">
+              <div className="lp-field">
+                <label className="lp-field-label" htmlFor="lp-doctor-name">Doctor Name</label>
+                <div className={`lp-input-shell${focused === 'name' ? ' is-focused' : ''}`}>
+                  <User className="lp-input-ico" strokeWidth={2} aria-hidden />
                   <input
+                    id="lp-doctor-name"
                     type="text"
                     value={doctorName}
                     onChange={(e) => setDoctorName(e.target.value)}
-                    className="hospital-auth-input"
-                      autoComplete="name"
-                      disabled={isSubmitting}
-                      autoFocus
-                      aria-label="Doctor name"
+                    onFocus={() => setFocused('name')}
+                    onBlur={() => setFocused(null)}
+                    className="lp-input"
+                    autoComplete="name"
+                    disabled={isSubmitting}
+                    autoFocus
+                    aria-label="Doctor name"
                   />
                 </div>
-              </label>
+              </div>
 
-              <label className="hospital-auth-field">
-                <span className="hospital-auth-label">Password</span>
-                <div className="hospital-auth-input-shell">
-                  <Lock className="hospital-auth-input-icon" strokeWidth={2} aria-hidden />
+              <div className="lp-field">
+                <label className="lp-field-label" htmlFor="lp-password">Password</label>
+                <div className={`lp-input-shell${focused === 'password' ? ' is-focused' : ''}`}>
+                  <Lock className="lp-input-ico" strokeWidth={2} aria-hidden />
                   <input
+                    id="lp-password"
                     type="password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    className="hospital-auth-input"
-                      autoComplete="current-password"
-                      disabled={isSubmitting}
-                      aria-label="Password"
+                    onFocus={() => setFocused('password')}
+                    onBlur={() => setFocused(null)}
+                    className="lp-input"
+                    autoComplete="current-password"
+                    disabled={isSubmitting}
+                    aria-label="Password"
                   />
                 </div>
-              </label>
+              </div>
 
-              {error && <p className="hospital-auth-error">{error}</p>}
+              {error != null && (
+                <motion.p
+                  className="lp-error"
+                  initial={{ opacity: 0, y: -6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.22 }}
+                >
+                  {error}
+                </motion.p>
+              )}
 
-              <button type="submit" disabled={isSubmitting} className="hospital-auth-submit-btn">
-                {isSubmitting ? 'Opening workspace...' : 'Sign In'}
-              </button>
+              <motion.button
+                type="submit"
+                disabled={isSubmitting}
+                className="lp-submit"
+                whileHover={{ scale: 1.012, y: -2 }}
+                whileTap={{ scale: 0.978 }}
+              >
+                {isSubmitting ? (
+                  <span className="lp-spinner-row">
+                    <motion.span
+                      className="lp-spinner"
+                      animate={{ rotate: 360 }}
+                      transition={{ duration: 0.7, repeat: Infinity, ease: 'linear' }}
+                    />
+                    Opening workspace…
+                  </span>
+                ) : (
+                  'Sign In'
+                )}
+              </motion.button>
 
-              <button type="button" onClick={onPass} className="hospital-auth-pass-btn">
-                Pass for testing
+              <button type="button" onClick={onPass} className="lp-ghost">
+                Continue without signing in
               </button>
             </form>
 
-            <div className="hospital-auth-footer">
-              <ShieldCheck className="h-4 w-4" strokeWidth={2.2} />
-              <span>Clinical workspace secure</span>
+            <div className="lp-auth-footer">
+              <ShieldCheck className="h-3.5 w-3.5 shrink-0 text-slate-400" strokeWidth={2.2} />
+              Secure clinical workspace
             </div>
           </div>
-        </div>
-      </motion.div>
+        </motion.div>
+      </div>
     </div>
   );
 }
