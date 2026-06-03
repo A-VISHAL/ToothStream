@@ -16,131 +16,217 @@ type ToothType = 'incisor' | 'canine' | 'premolar' | 'molar';
 
 interface ToothVariant {
   type: ToothType;
-  variant: 'incisor-central' | 'incisor-lateral' | 'canine-maxillary' | 'canine-mandibular' | 'premolar-first' | 'premolar-second' | 'molar-first' | 'molar-second' | 'molar-third';
+  variant:
+    | 'incisor-central'
+    | 'incisor-lateral'
+    | 'canine-maxillary'
+    | 'canine-mandibular'
+    | 'premolar-first'
+    | 'premolar-second'
+    | 'molar-first'
+    | 'molar-second'
+    | 'molar-third';
   mirror: boolean;
 }
 
-type BadgeTone = 'neutral' | 'danger' | 'warning' | 'success' | 'info';
+// ─── Badge types ──────────────────────────────────────────────────────────────
+
+type BadgeTone =
+  | 'missing'    // gray
+  | 'implant'    // teal
+  | 'bleeding'   // red
+  | 'recession'  // blue
+  | 'mobility'   // amber
+  | 'furcation'  // orange
+  | 'open'       // purple
+  | 'charted'    // green
+  | 'neutral';
 
 interface ToothBadge {
+  key: string;
   label: string;
   tone: BadgeTone;
 }
 
+// ─── Tooth variant lookup ─────────────────────────────────────────────────────
+
 function getToothVariant(toothNumber: number): ToothVariant {
   const position = toothNumber % 10;
   const isMaxillary = toothNumber < 30;
-  
+
   if (position === 1) return { type: 'incisor', variant: 'incisor-central', mirror: false };
   if (position === 2) return { type: 'incisor', variant: 'incisor-lateral', mirror: false };
-  if (position === 3) return { type: 'canine', variant: isMaxillary ? 'canine-maxillary' : 'canine-mandibular', mirror: false };
-  if (position === 4 || position === 5) return { type: 'premolar', variant: position === 4 ? 'premolar-first' : 'premolar-second', mirror: false };
-  if (position === 6 || position === 7 || position === 8) return { type: 'molar', variant: position === 6 ? 'molar-first' : position === 7 ? 'molar-second' : 'molar-third', mirror: false };
-  
+  if (position === 3)
+    return {
+      type: 'canine',
+      variant: isMaxillary ? 'canine-maxillary' : 'canine-mandibular',
+      mirror: false,
+    };
+  if (position === 4 || position === 5)
+    return {
+      type: 'premolar',
+      variant: position === 4 ? 'premolar-first' : 'premolar-second',
+      mirror: false,
+    };
+  if (position === 6 || position === 7 || position === 8)
+    return {
+      type: 'molar',
+      variant: position === 6 ? 'molar-first' : position === 7 ? 'molar-second' : 'molar-third',
+      mirror: false,
+    };
+
   return { type: 'molar', variant: 'molar-first', mirror: false };
 }
 
-function getSeverityColor(tooth: ToothState): { bg: string; border: string; icon: string; level: 'safe' | 'warning' | 'danger' | 'neutral' } {
-  const maxDepth = Math.max(
-    Math.max(...tooth.buccal.depth),
-    Math.max(...tooth.lingual.depth)
-  );
-  const hasbleeding = tooth.buccal.bleeding || tooth.lingual.bleeding;
+// ─── Severity color ───────────────────────────────────────────────────────────
 
-  if (tooth.missing) return { bg: 'bg-gray-100', border: 'border-gray-300', icon: '⚠️', level: 'neutral' };
-  if (tooth.implant) return { bg: 'bg-gray-100', border: 'border-gray-300', icon: '🦷', level: 'neutral' };
-  
-  if (hasbleeding || maxDepth >= 5) {
-    return { bg: 'bg-red-50', border: 'border-red-300', icon: '🔴', level: 'danger' };
-  }
-  if (maxDepth >= 4) {
-    return { bg: 'bg-orange-50', border: 'border-orange-300', icon: '🟠', level: 'warning' };
-  }
-  if (maxDepth >= 3 || maxDepth > 0) {
-    return { bg: 'bg-yellow-50', border: 'border-yellow-300', icon: '🟡', level: 'warning' };
-  }
-  
-  return { bg: 'bg-green-50', border: 'border-green-300', icon: '✓', level: 'safe' };
+function getSeverityColor(tooth: ToothState): {
+  bg: string;
+  border: string;
+  level: 'safe' | 'warning' | 'danger' | 'neutral';
+} {
+  const maxDepth = Math.max(Math.max(...tooth.buccal.depth), Math.max(...tooth.lingual.depth));
+  const hasBleeding = tooth.buccal.bleeding || tooth.lingual.bleeding;
+
+  if (tooth.missing) return { bg: 'bg-gray-100', border: 'border-gray-300', level: 'neutral' };
+  if (tooth.implant) return { bg: 'bg-teal-50', border: 'border-teal-200', level: 'safe' };
+  if (hasBleeding || maxDepth >= 5)
+    return { bg: 'bg-red-50', border: 'border-red-300', level: 'danger' };
+  if (maxDepth >= 4)
+    return { bg: 'bg-orange-50', border: 'border-orange-300', level: 'warning' };
+  if (maxDepth > 0)
+    return { bg: 'bg-yellow-50', border: 'border-yellow-300', level: 'warning' };
+
+  return { bg: 'bg-green-50', border: 'border-green-300', level: 'safe' };
 }
 
-function formatClassValue(value: number | boolean | undefined): string | null {
-  if (typeof value === 'number') {
-    return `C${value}`;
-  }
-
-  if (value === true) {
-    return '';
-  }
-
-  return null;
-}
+// ─── Badge builder ────────────────────────────────────────────────────────────
 
 function getFindingBadges(tooth: ToothState): ToothBadge[] {
   const badges: ToothBadge[] = [];
-  const maxDepth = Math.max(Math.max(...tooth.buccal.depth), Math.max(...tooth.lingual.depth));
-  const recessionValue = tooth.buccal.recession ?? tooth.lingual.recession;
-  const furcationValue = tooth.furcationSurface === 'lingual' ? tooth.lingual.furcationClass : tooth.furcationSurface === 'buccal' ? tooth.buccal.furcationClass : tooth.buccal.furcationClass ?? tooth.lingual.furcationClass;
 
+  // MISSING
   if (tooth.missing) {
-    badges.push({ label: 'Missing', tone: 'neutral' });
+    badges.push({ key: 'missing', label: 'MISSING', tone: 'missing' });
+    return badges; // missing teeth have no other findings to show
   }
 
+  // IMPLANT
   if (tooth.implant) {
-    badges.push({ label: 'Implant', tone: 'neutral' });
+    badges.push({ key: 'implant', label: 'IMPLANT', tone: 'implant' });
   }
 
+  // BLEEDING (buccal or lingual)
   if (tooth.buccal.bleeding || tooth.lingual.bleeding) {
-    badges.push({ label: 'Bleeding', tone: 'danger' });
+    badges.push({ key: 'bleeding', label: 'BLEED', tone: 'bleeding' });
   }
 
-  const mobilityLabel = formatClassValue(tooth.mobilityClass);
-  if (typeof tooth.mobilityClass !== 'undefined') {
-    badges.push({ label: mobilityLabel ? `Mobility ${mobilityLabel}` : 'Mobility', tone: 'warning' });
+  // RECESSION — read from buccal first, then lingual
+  // recession is number | boolean | undefined; only show when it's a number > 0 or true
+  const buccalRecession = tooth.buccal.recession;
+  const lingualRecession = tooth.lingual.recession;
+  const recession = typeof buccalRecession === 'number' && buccalRecession > 0
+    ? buccalRecession
+    : typeof lingualRecession === 'number' && lingualRecession > 0
+      ? lingualRecession
+      : buccalRecession === true
+        ? true
+        : lingualRecession === true
+          ? true
+          : undefined;
+
+  if (recession !== undefined) {
+    const recLabel = typeof recession === 'number' ? `REC ${recession}` : 'REC';
+    badges.push({ key: 'recession', label: recLabel, tone: 'recession' });
   }
 
-  if (typeof furcationValue !== 'undefined') {
-    const furcationLabel = formatClassValue(furcationValue);
-    badges.push({ label: furcationLabel ? `Furcation ${furcationLabel}` : 'Furcation', tone: 'warning' });
+  // MOBILITY — on ToothState directly
+  if (tooth.mobilityClass !== undefined && tooth.mobilityClass !== false) {
+    const mobLabel =
+      typeof tooth.mobilityClass === 'number'
+        ? `M${tooth.mobilityClass}`
+        : 'MOB';
+    badges.push({ key: 'mobility', label: mobLabel, tone: 'mobility' });
   }
 
-  if (typeof recessionValue !== 'undefined' && recessionValue !== false) {
-    badges.push({ label: `Recession ${typeof recessionValue === 'number' ? recessionValue : ''}`.trim(), tone: 'warning' });
+  // FURCATION — on ToothSurfaceState (buccal or lingual)
+  const buccalFurcation = tooth.buccal.furcationClass;
+  const lingualFurcation = tooth.lingual.furcationClass;
+  const furcation =
+    typeof buccalFurcation !== 'undefined' && buccalFurcation !== false
+      ? buccalFurcation
+      : typeof lingualFurcation !== 'undefined' && lingualFurcation !== false
+        ? lingualFurcation
+        : undefined;
+
+  if (furcation !== undefined) {
+    const furcLabel = typeof furcation === 'number' ? `F${furcation}` : 'FUR';
+    badges.push({ key: 'furcation', label: furcLabel, tone: 'furcation' });
   }
 
-  const chartStatus = tooth.chartStatus ?? (tooth.missing || tooth.implant || tooth.buccal.bleeding || tooth.lingual.bleeding || typeof tooth.mobilityClass !== 'undefined' || typeof furcationValue !== 'undefined' || typeof recessionValue !== 'undefined' || maxDepth > 0 ? 'charted' : 'open');
+  // CHART STATUS — explicit status or derived
+  const maxDepth = Math.max(Math.max(...tooth.buccal.depth), Math.max(...tooth.lingual.depth));
+  const hasAnyFinding =
+    tooth.implant ||
+    tooth.buccal.bleeding ||
+    tooth.lingual.bleeding ||
+    recession !== undefined ||
+    tooth.mobilityClass !== undefined ||
+    furcation !== undefined ||
+    maxDepth > 0;
 
-  if (chartStatus === 'charted' && maxDepth > 0) {
-    badges.push({ label: maxDepth >= 5 ? `Charted ${maxDepth}mm` : maxDepth >= 4 ? `Charted ${maxDepth}mm` : `Charted ${maxDepth}mm`, tone: maxDepth >= 5 ? 'danger' : maxDepth >= 4 ? 'warning' : 'success' });
-  } else if (chartStatus === 'charted') {
-    badges.push({ label: 'Charted', tone: 'success' });
+  const effectiveStatus: 'open' | 'charted' =
+    tooth.chartStatus ?? (hasAnyFinding ? 'charted' : 'open');
+
+  if (effectiveStatus === 'charted') {
+    badges.push({ key: 'charted', label: 'CHARTED', tone: 'charted' });
   } else {
-    badges.push({ label: 'Open', tone: 'success' });
+    badges.push({ key: 'open', label: 'OPEN', tone: 'open' });
   }
 
   return badges;
 }
 
+// ─── Badge tone → Tailwind classes ────────────────────────────────────────────
+
 function badgeToneClasses(tone: BadgeTone): string {
   switch (tone) {
-    case 'neutral':
-      return 'border-slate-300 bg-slate-100 text-slate-700';
-    case 'danger':
-      return 'border-rose-200 bg-rose-100 text-rose-700';
-    case 'warning':
-      return 'border-amber-200 bg-amber-100 text-amber-700';
-    case 'success':
+    case 'missing':
+      return 'border-slate-300 bg-slate-200 text-slate-700';
+    case 'implant':
+      return 'border-teal-300 bg-teal-100 text-teal-800';
+    case 'bleeding':
+      return 'border-red-300 bg-red-100 text-red-700';
+    case 'recession':
+      return 'border-blue-300 bg-blue-100 text-blue-700';
+    case 'mobility':
+      return 'border-amber-300 bg-amber-100 text-amber-700';
+    case 'furcation':
+      return 'border-orange-300 bg-orange-100 text-orange-700';
+    case 'open':
+      return 'border-purple-200 bg-purple-50 text-purple-700';
+    case 'charted':
       return 'border-emerald-200 bg-emerald-100 text-emerald-700';
-    case 'info':
-      return 'border-cyan-200 bg-cyan-100 text-cyan-800';
+    case 'neutral':
     default:
       return 'border-slate-300 bg-slate-100 text-slate-700';
   }
 }
 
-function ToothSVGRenderer({ toothNumber, arch, compact }: { toothNumber: number; arch: 'maxillary' | 'mandibular'; compact: boolean }) {
+// ─── SVG tooth renderer ───────────────────────────────────────────────────────
+
+function ToothSVGRenderer({
+  toothNumber,
+  arch,
+  compact,
+}: {
+  toothNumber: number;
+  arch: 'maxillary' | 'mandibular';
+  compact: boolean;
+}) {
   const toothInfo = getToothVariant(toothNumber);
   const shadowId = `tooth-${toothNumber}-shadow`;
-  
+
   const commonProps = {
     fill: '#f5e6d3',
     stroke: '#c8a882',
@@ -153,8 +239,8 @@ function ToothSVGRenderer({ toothNumber, arch, compact }: { toothNumber: number;
   };
 
   const svgProps = compact
-    ? { width: 62, height: 96, viewBox: '0 0 100 150' }
-    : { width: 100, height: 160, viewBox: '0 0 100 150' };
+    ? { width: 62, height: 72, viewBox: '0 0 100 120' }
+    : { width: 80, height: 96, viewBox: '0 0 100 130' };
 
   const shadowDef = (
     <defs>
@@ -200,54 +286,81 @@ function ToothSVGRenderer({ toothNumber, arch, compact }: { toothNumber: number;
   return null;
 }
 
-export function EnhancedToothCard({ tooth, isActive, arch, compact = false }: EnhancedToothCardProps) {
+// ─── Main component ───────────────────────────────────────────────────────────
+
+export function EnhancedToothCard({
+  tooth,
+  isActive,
+  arch,
+  compact = false,
+}: EnhancedToothCardProps) {
   const severity = useMemo(() => getSeverityColor(tooth), [tooth]);
   const badges = useMemo(() => getFindingBadges(tooth), [tooth]);
 
+  const maxDepth = Math.max(
+    Math.max(...tooth.buccal.depth),
+    Math.max(...tooth.lingual.depth),
+  );
+
   return (
     <div
-      className={`group relative flex w-full min-w-0 flex-col items-center overflow-hidden rounded-[14px] border transition-all ${compact ? 'gap-1 px-1.5 pb-1.5 pt-2' : 'gap-1.5 px-2 pb-2 pt-2.5'} ${severity.bg} ${severity.border} ${isActive ? 'active-tooth shadow-[0_10px_24px_rgba(14,165,233,0.16)]' : 'shadow-[0_6px_18px_rgba(15,23,42,0.04)]'}`}
+      className={[
+        'group relative flex w-full min-w-0 flex-col items-center rounded-[14px] border transition-all',
+        compact ? 'gap-0.5 px-1 pb-1.5 pt-1.5' : 'gap-1 px-1.5 pb-2 pt-2',
+        severity.bg,
+        severity.border,
+        isActive
+          ? 'active-tooth shadow-[0_10px_24px_rgba(14,165,233,0.18)]'
+          : 'shadow-[0_4px_12px_rgba(15,23,42,0.05)]',
+      ].join(' ')}
     >
-      <div className="absolute left-1.5 top-1.5 flex items-center gap-1">
-        <span className={`rounded-full border border-white/80 bg-white/90 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-slate-700 shadow-sm ${isActive ? 'text-cyan-800' : ''}`}>
-          {tooth.toothNumber}
-        </span>
+      {/* Tooth number */}
+      <span
+        className={[
+          'self-start rounded-full border border-white/80 bg-white/90 px-1.5 py-0.5 font-semibold leading-none text-slate-700 shadow-sm',
+          compact ? 'text-[9px]' : 'text-[10px]',
+          isActive ? 'text-cyan-800' : '',
+        ].join(' ')}
+      >
+        {tooth.toothNumber}
+      </span>
+
+      {/* SVG tooth illustration */}
+      <div className="flex w-full justify-center">
+        <ToothSVGRenderer
+          toothNumber={tooth.toothNumber}
+          arch={arch}
+          compact={compact}
+        />
       </div>
 
-      <div className="absolute right-1.5 top-1.5 flex items-center gap-1">
-        <span className={`inline-flex h-4.5 w-4.5 items-center justify-center rounded-full border border-white/80 text-[10px] leading-none shadow-sm ${severity.level === 'danger' ? 'bg-rose-500 text-white' : severity.level === 'warning' ? 'bg-amber-400 text-white' : severity.level === 'safe' ? 'bg-emerald-400 text-white' : 'bg-slate-300 text-slate-700'}`}>
-          {severity.icon}
-        </span>
-      </div>
-
-      <div className={`relative flex w-full justify-center ${compact ? 'h-[5.6rem]' : 'h-[6.5rem]'}`}>
-        <ToothSVGRenderer toothNumber={tooth.toothNumber} arch={arch} compact={compact} />
-
-        <div className="pointer-events-none absolute inset-x-0 bottom-1 flex justify-center px-1">
-          <div className={`flex max-w-full flex-wrap justify-center gap-1 ${compact ? 'scale-[0.92]' : ''}`}>
-            {badges.slice(0, compact ? 2 : 4).map((badge) => (
-              <span
-                key={badge.label}
-                className={`whitespace-nowrap rounded-full border px-2 py-0.5 text-[9px] font-semibold leading-none shadow-sm ${badgeToneClasses(badge.tone)}`}
-              >
-                {badge.label}
-              </span>
-            ))}
-          </div>
+      {/* ── Finding badges — rendered BELOW the tooth SVG, never overlapping ── */}
+      {badges.length > 0 && (
+        <div className="flex w-full flex-wrap justify-center gap-[3px] px-0.5">
+          {badges.map((badge) => (
+            <span
+              key={badge.key}
+              className={[
+                'whitespace-nowrap rounded-full border px-1.5 py-0.5 font-bold leading-none shadow-sm',
+                compact ? 'text-[8px]' : 'text-[9px]',
+                badgeToneClasses(badge.tone),
+              ].join(' ')}
+            >
+              {badge.label}
+            </span>
+          ))}
         </div>
-      </div>
+      )}
 
-      {!compact && !tooth.missing && Math.max(Math.max(...tooth.buccal.depth), Math.max(...tooth.lingual.depth)) > 0 ? (
-        <div className="w-full px-1 pb-0.5 text-center text-[9px] text-slate-500">
-          <span className="font-semibold text-slate-600">B</span> {tooth.buccal.depth.join('-')} · <span className="font-semibold text-slate-600">L</span> {tooth.lingual.depth.join('-')}
+      {/* Depth row — only shown in non-compact when depth exists */}
+      {!compact && !tooth.missing && maxDepth > 0 && (
+        <div className="w-full px-1 text-center text-[9px] text-slate-500">
+          <span className="font-semibold text-slate-600">B</span>{' '}
+          {tooth.buccal.depth.join('-')} ·{' '}
+          <span className="font-semibold text-slate-600">L</span>{' '}
+          {tooth.lingual.depth.join('-')}
         </div>
-      ) : null}
-
-      {(tooth.buccal.bleeding || tooth.lingual.bleeding) && compact ? (
-        <span className="absolute bottom-1.5 right-1.5 rounded-full border border-rose-200 bg-rose-100 px-1.5 py-0.5 text-[9px] font-semibold leading-none text-rose-700 shadow-sm">
-          Bleed
-        </span>
-      ) : null}
+      )}
     </div>
   );
 }
