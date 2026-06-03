@@ -297,6 +297,25 @@ export function EnhancedToothCard({
   const severity = useMemo(() => getSeverityColor(tooth), [tooth]);
   const badges = useMemo(() => getFindingBadges(tooth), [tooth]);
 
+  // ── Debug: log exact state fields used for badge rendering ──
+  React.useEffect(() => {
+    const buccalRecession = tooth.buccal.recession;
+    const lingualRecession = tooth.lingual.recession;
+    const buccalFurcation = tooth.buccal.furcationClass;
+    const lingualFurcation = tooth.lingual.furcationClass;
+
+    console.log('TOOTH_RENDER_STATE', tooth.toothNumber, {
+      mobilityClass: tooth.mobilityClass,
+      recession: buccalRecession ?? lingualRecession,
+      furcationClass: buccalFurcation ?? lingualFurcation,
+      bleeding: tooth.buccal.bleeding || tooth.lingual.bleeding,
+      implant: tooth.implant,
+      missing: tooth.missing,
+      chartStatus: tooth.chartStatus,
+      badges: badges.map((b) => b.label),
+    });
+  }, [tooth, badges]);
+
   const maxDepth = Math.max(
     Math.max(...tooth.buccal.depth),
     Math.max(...tooth.lingual.depth),
