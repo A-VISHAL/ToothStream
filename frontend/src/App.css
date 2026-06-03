@@ -1730,6 +1730,15 @@ body {
   min-height: 100vh;
 }
 
+/* Hide scrollbar but keep scroll functionality */
+.no-scrollbar {
+  scrollbar-width: none;       /* Firefox */
+  -ms-overflow-style: none;    /* IE / Edge */
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;               /* Chrome / Safari / Opera */
+}
+
 /* ================================================================
    LOGIN PAGE — lp-* namespace (centered card on dark bg)
    ================================================================ */

@@ -365,7 +365,8 @@ export function FinalReportWorkflow({ doctorName }: FinalReportWorkflowProps) {
 
   return (
     <>
-      <div className="fixed right-6 top-6 z-50 flex flex-col items-end gap-3">
+      {/* FAB at bottom-right — never overlaps the header */}
+      <div className="fixed bottom-6 right-6 z-50 flex flex-col items-end gap-3">
         {toastMessage ? (
           <div className="max-w-[320px] rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-medium text-rose-800 shadow-lg">
             {toastMessage}
@@ -375,11 +376,9 @@ export function FinalReportWorkflow({ doctorName }: FinalReportWorkflowProps) {
         <div title={reportReady ? 'Generate report' : 'Complete charting to generate report'}>
           <button
             type="button"
-            onClick={() => {
-              void openPanel();
-            }}
+            onClick={() => { void openPanel(); }}
             disabled={!reportReady}
-            className="rounded-full border border-cyan-700 bg-cyan-700 px-5 py-3 text-xs font-semibold uppercase tracking-[0.24em] text-white shadow-[0_14px_30px_rgba(8,145,178,0.32)] transition hover:bg-cyan-800 disabled:cursor-not-allowed disabled:border-slate-300 disabled:bg-slate-200 disabled:text-slate-500 disabled:shadow-none"
+            className="rounded-full border border-cyan-700 bg-cyan-700 px-5 py-3 text-xs font-semibold uppercase tracking-[0.24em] text-white shadow-[0_14px_30px_rgba(8,145,178,0.32)] transition hover:bg-cyan-800 active:scale-95 disabled:cursor-not-allowed disabled:border-slate-300 disabled:bg-slate-200 disabled:text-slate-500 disabled:shadow-none"
           >
             Generate Report
           </button>

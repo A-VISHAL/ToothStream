@@ -10,7 +10,7 @@ import { FinalReportWorkflow } from './components/FinalReportWorkflow';
 import { StatusBar } from './components/StatusBar';
 import { TranscriptPanel } from './components/TranscriptPanel';
 import { WebSocketProvider, usePerioChart } from './components/WebSocketProvider';
-import { Activity, Mic, Stethoscope } from 'lucide-react';
+import { Activity, ArrowLeft, Mic, Stethoscope } from 'lucide-react';
 
 const AUTH_STORAGE_KEY = 'trust-ai-auth-session';
 const AUTH_DOCTOR_NAME = 'Dr. Emily Carter';
@@ -67,7 +67,7 @@ function ConnectionBadge({ state }: { state: string }) {
 }
 
 /* ── Main dashboard page ── */
-function Dashboard({ doctorName, patient }: { doctorName: string; patient: PatientProfile | null }) {
+function Dashboard({ doctorName, patient, onExit }: { doctorName: string; patient: PatientProfile | null; onExit: () => void }) {
   const {
     connectionState, latencyMs, socketUrl, lastPayload,
     transcriptionError, commandFeedback,
@@ -106,41 +106,68 @@ function Dashboard({ doctorName, patient }: { doctorName: string; patient: Patie
       </AnimatePresence>
 
       <div className="relative mx-auto flex min-h-[calc(100vh-1.5rem)] max-w-[1800px] flex-col gap-3">
-        {/* Header */}
-        <header className="panel-surface rounded-[24px] px-5 py-4">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-            <div className="flex items-center gap-4">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-cyan-500 to-blue-600 shadow-lg shadow-cyan-500/20">
-                <Stethoscope className="h-5 w-5 text-white" strokeWidth={2} />
+        {/* Header — single row, no wrap, back button on the left */}
+        <header className="panel-surface rounded-[24px] px-4 py-3">
+          <div className="flex min-w-0 items-center gap-3">
+
+            {/* Back button */}
+            <button
+              type="button"
+              onClick={onExit}
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 shadow-sm transition hover:border-cyan-300 hover:bg-cyan-50 hover:text-cyan-700 active:scale-95"
+              title="Back to patient entry"
+            >
+              <ArrowLeft className="h-4 w-4" strokeWidth={2.5} />
+            </button>
+
+            {/* Brand */}
+            <div className="flex shrink-0 items-center gap-3">
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-cyan-500 to-blue-600 shadow-md shadow-cyan-500/20">
+                <Stethoscope className="h-4 w-4 text-white" strokeWidth={2} />
               </div>
-              <div>
-                <p className="text-[10px] font-bold uppercase tracking-[0.36em] text-cyan-600">ToothStream AI</p>
-                <h1 className="text-lg font-extrabold tracking-tight text-slate-900 sm:text-[1.35rem]">
-                  Periodontal Charting Workspace
+              <div className="hidden sm:block">
+                <p className="text-[9px] font-bold uppercase tracking-[0.35em] text-cyan-600 leading-none">ToothStream AI</p>
+                <h1 className="text-base font-extrabold tracking-tight text-slate-900 leading-tight">
+                  Periodontal Charting
                 </h1>
               </div>
             </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="inline-flex items-center gap-2 rounded-full border border-cyan-200 bg-cyan-50 px-3 py-1.5 text-[10.5px] font-bold uppercase tracking-[0.22em] text-cyan-800">
+
+            {/* Divider */}
+            <div className="mx-1 hidden h-8 w-px shrink-0 bg-slate-200 sm:block" />
+
+            {/* Scrollable badge strip — overflow hidden on narrow screens */}
+            <div className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto no-scrollbar">
+
+              {/* Doctor */}
+              <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-cyan-200 bg-cyan-50 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.2em] text-cyan-800 whitespace-nowrap">
                 <span className="h-1.5 w-1.5 rounded-full bg-cyan-500" />
                 {doctorName}
               </span>
+
+              {/* Patient */}
               {patient && (
-                <span className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[10.5px] font-bold uppercase tracking-[0.22em] text-slate-600 shadow-sm">
+                <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.2em] text-slate-600 whitespace-nowrap shadow-sm">
                   <span className="h-1.5 w-1.5 rounded-full bg-slate-400" />
                   {patient.name}
                 </span>
               )}
+
+              {/* Connection */}
               <ConnectionBadge state={connectionState} />
+
+              {/* Latency */}
               {latencyMs !== null && (
-                <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[10.5px] font-bold text-slate-600 shadow-sm">
+                <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[10px] font-bold text-slate-600 whitespace-nowrap shadow-sm">
                   <Activity className="h-3 w-3 text-emerald-500" strokeWidth={2.5} />
                   {latencyMs}ms
                 </span>
               )}
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[10.5px] font-medium text-slate-500 shadow-sm">
+
+              {/* Deepgram */}
+              <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[10px] font-medium text-slate-500 whitespace-nowrap shadow-sm">
                 <Mic className="h-3 w-3" strokeWidth={2} />
-                {connectionState === 'connected' || connectionState === 'listening' ? 'Deepgram live' : 'Deepgram offline'}
+                {connectionState === 'connected' || connectionState === 'listening' ? 'Live' : 'Offline'}
               </span>
             </div>
           </div>
@@ -259,7 +286,11 @@ export default function App() {
       {page === 'dashboard' && (
         <motion.div key="dashboard" className="page-transition-wrap" {...commonMotion}>
           <WebSocketProvider>
-            <Dashboard doctorName={session.doctorName} patient={patient} />
+            <Dashboard
+              doctorName={session.doctorName}
+              patient={patient}
+              onExit={() => navigate('patient-entry')}
+            />
           </WebSocketProvider>
         </motion.div>
       )}
