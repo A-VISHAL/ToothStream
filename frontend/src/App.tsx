@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
 import './App.css';
 import { LoginPage } from './components/LoginPage';
 import { ClinicalOverviewPage } from './components/ClinicalOverviewPage';
@@ -14,6 +15,15 @@ import { Activity, Mic, Stethoscope } from 'lucide-react';
 const AUTH_STORAGE_KEY = 'trust-ai-auth-session';
 const AUTH_DOCTOR_NAME = 'Dr. Emily Carter';
 
+/* ── Page-order map: used to decide slide direction ── */
+const PAGE_ORDER: Record<string, number> = {
+  login: 0,
+  intro: 1,
+  'patient-entry': 2,
+  dashboard: 3,
+};
+
+/* ── Session persistence ── */
 function getStoredSession(): { loggedIn: boolean; doctorName: string; remember: boolean } {
   if (typeof window === 'undefined') {
     return { loggedIn: false, doctorName: AUTH_DOCTOR_NAME, remember: false };
@@ -37,14 +47,15 @@ function persistSession(loggedIn: boolean, doctorName: string, remember: boolean
   window.localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify({ loggedIn, doctorName, remember }));
 }
 
+/* ── Connection status badge ── */
 function ConnectionBadge({ state }: { state: string }) {
   const map: Record<string, { cls: string; dot: string; label: string }> = {
-    connected: { cls: 'border-emerald-200 bg-emerald-50 text-emerald-700', dot: 'bg-emerald-500', label: 'Connected' },
-    listening: { cls: 'border-emerald-200 bg-emerald-50 text-emerald-700', dot: 'bg-emerald-500 mic-pulse', label: 'Listening' },
-    reconnecting: { cls: 'border-amber-200 bg-amber-50 text-amber-700', dot: 'bg-amber-500', label: 'Reconnecting' },
-    connecting: { cls: 'border-cyan-200 bg-cyan-50 text-cyan-800', dot: 'bg-cyan-500', label: 'Connecting' },
-    disconnected: { cls: 'border-slate-200 bg-slate-50 text-slate-600', dot: 'bg-slate-400', label: 'Disconnected' },
-    error: { cls: 'border-rose-200 bg-rose-50 text-rose-700', dot: 'bg-rose-500', label: 'Error' },
+    connected:    { cls: 'border-emerald-200 bg-emerald-50 text-emerald-700', dot: 'bg-emerald-500',       label: 'Connected'    },
+    listening:    { cls: 'border-emerald-200 bg-emerald-50 text-emerald-700', dot: 'bg-emerald-500 mic-pulse', label: 'Listening' },
+    reconnecting: { cls: 'border-amber-200  bg-amber-50  text-amber-700',    dot: 'bg-amber-500',         label: 'Reconnecting' },
+    connecting:   { cls: 'border-cyan-200   bg-cyan-50   text-cyan-800',     dot: 'bg-cyan-500',          label: 'Connecting'   },
+    disconnected: { cls: 'border-slate-200  bg-slate-50  text-slate-600',    dot: 'bg-slate-400',         label: 'Disconnected' },
+    error:        { cls: 'border-rose-200   bg-rose-50   text-rose-700',     dot: 'bg-rose-500',          label: 'Error'        },
   };
   const { cls, dot, label } = map[state] ?? map.disconnected;
   return (
@@ -55,102 +66,87 @@ function ConnectionBadge({ state }: { state: string }) {
   );
 }
 
+/* ── Main dashboard page ── */
 function Dashboard({ doctorName, patient }: { doctorName: string; patient: PatientProfile | null }) {
   const {
-    connectionState,
-    latencyMs,
-    socketUrl,
-    lastPayload,
-    transcriptionError,
-    commandFeedback,
-    soundEnabled,
-    setSoundEnabled,
-    unlockAudio,
-    currentTooth,
-    currentSurface,
-    activeSiteIndex,
-    teeth,
+    connectionState, latencyMs, socketUrl, lastPayload,
+    transcriptionError, commandFeedback,
+    soundEnabled, setSoundEnabled, unlockAudio,
+    currentTooth, currentSurface, activeSiteIndex, teeth,
   } = usePerioChart();
 
   return (
     <div className="app-shell relative px-3 py-3 sm:px-4 lg:px-5">
-      {/* Command toast */}
-      {commandFeedback ? (
-        <div className="command-toast fixed right-4 top-4 z-50 rounded-full border px-4 py-2 text-xs font-semibold uppercase tracking-[0.24em] transition-all duration-200 sm:right-6 sm:top-6">
-          <span
-            className={`inline-flex items-center gap-2 ${
-              commandFeedback.kind === 'undo'
-                ? 'border-amber-200 bg-amber-50 text-amber-800'
-                : commandFeedback.kind === 'bleeding'
-                  ? 'border-rose-200 bg-rose-50 text-rose-700'
-                  : commandFeedback.kind === 'jump'
-                    ? 'border-cyan-200 bg-cyan-50 text-cyan-800'
-                    : 'border-slate-200 bg-white text-slate-700'
-            }`}
+      {/* Command feedback toast */}
+      <AnimatePresence>
+        {commandFeedback && (
+          <motion.div
+            key={commandFeedback.message}
+            className="fixed right-5 top-5 z-50"
+            initial={{ opacity: 0, y: -12, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -8, scale: 0.95 }}
+            transition={{ duration: 0.22 }}
           >
-            {commandFeedback.message}
-          </span>
-        </div>
-      ) : null}
+            <span
+              className={`inline-flex items-center gap-2 rounded-full border px-4 py-2 text-xs font-semibold uppercase tracking-[0.24em] shadow-lg ${
+                commandFeedback.kind === 'undo'
+                  ? 'border-amber-200 bg-amber-50 text-amber-800'
+                  : commandFeedback.kind === 'bleeding'
+                    ? 'border-rose-200 bg-rose-50 text-rose-700'
+                    : commandFeedback.kind === 'jump'
+                      ? 'border-cyan-200 bg-cyan-50 text-cyan-800'
+                      : 'border-slate-200 bg-white text-slate-700'
+              }`}
+            >
+              {commandFeedback.message}
+            </span>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <div className="relative mx-auto flex min-h-[calc(100vh-1.5rem)] max-w-[1800px] flex-col gap-3">
-        {/* Premium header */}
+        {/* Header */}
         <header className="panel-surface rounded-[24px] px-5 py-4">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-            {/* Brand + title */}
             <div className="flex items-center gap-4">
               <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-cyan-500 to-blue-600 shadow-lg shadow-cyan-500/20">
                 <Stethoscope className="h-5 w-5 text-white" strokeWidth={2} />
               </div>
               <div>
-                <p className="text-[10px] font-bold uppercase tracking-[0.36em] text-cyan-600">
-                  ToothStream AI
-                </p>
+                <p className="text-[10px] font-bold uppercase tracking-[0.36em] text-cyan-600">ToothStream AI</p>
                 <h1 className="text-lg font-extrabold tracking-tight text-slate-900 sm:text-[1.35rem]">
                   Periodontal Charting Workspace
                 </h1>
               </div>
             </div>
-
-            {/* Right-side badges */}
             <div className="flex flex-wrap items-center gap-2">
-              {/* Doctor badge */}
               <span className="inline-flex items-center gap-2 rounded-full border border-cyan-200 bg-cyan-50 px-3 py-1.5 text-[10.5px] font-bold uppercase tracking-[0.22em] text-cyan-800">
                 <span className="h-1.5 w-1.5 rounded-full bg-cyan-500" />
                 {doctorName}
               </span>
-
-              {/* Patient badge */}
-              {patient ? (
+              {patient && (
                 <span className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[10.5px] font-bold uppercase tracking-[0.22em] text-slate-600 shadow-sm">
                   <span className="h-1.5 w-1.5 rounded-full bg-slate-400" />
                   {patient.name}
                 </span>
-              ) : null}
-
-              {/* Connection state */}
+              )}
               <ConnectionBadge state={connectionState} />
-
-              {/* Latency */}
               {latencyMs !== null && (
                 <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[10.5px] font-bold text-slate-600 shadow-sm">
                   <Activity className="h-3 w-3 text-emerald-500" strokeWidth={2.5} />
                   {latencyMs}ms
                 </span>
               )}
-
-              {/* Deepgram indicator */}
               <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[10.5px] font-medium text-slate-500 shadow-sm">
                 <Mic className="h-3 w-3" strokeWidth={2} />
-                {connectionState === 'connected' || connectionState === 'listening'
-                  ? 'Deepgram live'
-                  : 'Deepgram offline'}
+                {connectionState === 'connected' || connectionState === 'listening' ? 'Deepgram live' : 'Deepgram offline'}
               </span>
             </div>
           </div>
         </header>
 
-        {/* Main layout */}
+        {/* Main grid */}
         <main className="grid flex-1 min-h-0 gap-3 xl:grid-cols-[360px,minmax(0,1fr)] xl:items-start">
           <aside className="order-2 min-h-0 self-start xl:sticky xl:top-3 xl:order-1">
             <div className="space-y-3">
@@ -167,7 +163,6 @@ function Dashboard({ doctorName, patient }: { doctorName: string; patient: Patie
               />
             </div>
           </aside>
-
           <section className="order-1 min-w-0 min-h-0 xl:order-2">
             <div className="panel-surface rounded-[24px] p-3 sm:p-4">
               <PerioChart
@@ -187,55 +182,87 @@ function Dashboard({ doctorName, patient }: { doctorName: string; patient: Patie
   );
 }
 
+/* ── Root app with animated page transitions ── */
+type PageKey = 'login' | 'intro' | 'patient-entry' | 'dashboard';
+
 export default function App() {
   const [session, setSession] = useState(() => getStoredSession());
-  const [page, setPage] = useState<'login' | 'intro' | 'patient-entry' | 'dashboard'>('login');
+  const [page, setPage] = useState<PageKey>('login');
+  const [prevPage, setPrevPage] = useState<PageKey>('login');
   const [patient, setPatient] = useState<PatientProfile | null>(null);
 
   useEffect(() => {
     persistSession(session.loggedIn, session.doctorName, Boolean(session.remember));
   }, [session]);
 
-  if (page === 'login') {
-    return (
-      <LoginPage
-        onSignIn={(doctorName: string, remember?: boolean) => {
-          setSession({ loggedIn: true, doctorName, remember: Boolean(remember) });
-          setPage('intro');
-        }}
-        onPass={() => {
-          setSession({ loggedIn: true, doctorName: AUTH_DOCTOR_NAME, remember: false });
-          setPage('dashboard');
-        }}
-      />
-    );
+  /* Scroll to top on every page change */
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, [page]);
+
+  const dir = PAGE_ORDER[page] - PAGE_ORDER[prevPage];
+  const enterX  = dir >= 0 ?  36 : -36;
+  const exitX   = dir >= 0 ? -36 :  36;
+
+  function navigate(next: PageKey) {
+    setPrevPage(page);
+    setPage(next);
   }
 
-  if (page === 'intro') {
-    return (
-      <ClinicalOverviewPage
-        doctorName={session.doctorName}
-        onGetStarted={() => setPage('patient-entry')}
-      />
-    );
-  }
-
-  if (page === 'patient-entry') {
-    return (
-      <PatientEntryPage
-        doctorName={session.doctorName}
-        onBack={() => setPage('intro')}
-        onContinue={(nextPatient) => {
-          setPatient(nextPatient);
-          setPage('dashboard');
-        }}
-      />
-    );
-  }
+  /* shared transition props — using direct motion props (no Variants) avoids FM v12 TS issues */
+  const commonMotion = {
+    initial:    { opacity: 0, x: enterX },
+    animate:    { opacity: 1, x: 0 },
+    exit:       { opacity: 0, x: exitX },
+    transition: { duration: 0.38 },
+  };
 
   return (
-    <WebSocketProvider>
-      <Dashboard doctorName={session.doctorName} patient={patient} />
-    </WebSocketProvider>
+    <AnimatePresence mode="wait" initial={false}>
+      {page === 'login' && (
+        <motion.div key="login" className="page-transition-wrap" {...commonMotion}>
+          <LoginPage
+            onSignIn={(doctorName) => {
+              setSession({ loggedIn: true, doctorName, remember: false });
+              navigate('intro');
+            }}
+            onPass={() => {
+              setSession({ loggedIn: true, doctorName: AUTH_DOCTOR_NAME, remember: false });
+              navigate('dashboard');
+            }}
+          />
+        </motion.div>
+      )}
+
+      {page === 'intro' && (
+        <motion.div key="intro" className="page-transition-wrap" {...commonMotion}>
+          <ClinicalOverviewPage
+            doctorName={session.doctorName}
+            onGetStarted={() => navigate('patient-entry')}
+          />
+        </motion.div>
+      )}
+
+      {page === 'patient-entry' && (
+        <motion.div key="patient-entry" className="page-transition-wrap" {...commonMotion}>
+          <PatientEntryPage
+            doctorName={session.doctorName}
+            onBack={() => navigate('intro')}
+            onContinue={(nextPatient) => {
+              setPatient(nextPatient);
+              navigate('dashboard');
+            }}
+          />
+        </motion.div>
+      )}
+
+      {page === 'dashboard' && (
+        <motion.div key="dashboard" className="page-transition-wrap" {...commonMotion}>
+          <WebSocketProvider>
+            <Dashboard doctorName={session.doctorName} patient={patient} />
+          </WebSocketProvider>
+        </motion.div>
+      )}
+    </AnimatePresence>
   );
 }

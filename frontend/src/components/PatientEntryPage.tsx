@@ -69,7 +69,7 @@ export function PatientEntryPage({ doctorName, onBack, onContinue }: PatientEntr
   };
 
   return (
-    <div className="app-shell min-h-screen overflow-y-auto px-4 py-4 sm:px-6 lg:px-8">
+    <div className="app-shell min-h-screen px-4 py-4 sm:px-6 lg:px-8">
       {/* Floating progress */}
       <div className="float-progress" aria-label="Onboarding progress">
         <span className="float-progress-step done" title="Sign in" />

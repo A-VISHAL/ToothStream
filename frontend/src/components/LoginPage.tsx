@@ -1,274 +1,243 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
-import { HeartPulse, Lock, ShieldCheck, User, Mic, Activity, Stethoscope } from 'lucide-react';
+import { HeartPulse, Lock, Mic, ShieldCheck, Stethoscope, User, Zap } from 'lucide-react';
 
 interface LoginPageProps {
-  onSignIn: (doctorName: string, remember?: boolean) => void;
+  onSignIn: (doctorName: string) => void;
   onPass: () => void;
 }
 
-const DEFAULT_DOCTOR_NAME = 'Doctor XX';
-const DEFAULT_PASSWORD = 'dental123';
+const DEFAULT_NAME = 'Doctor XX';
+const DEFAULT_PASS = 'dental123';
 
-function VoiceWaveform() {
-  const amps = [0.4, 0.7, 0.5, 0.9, 0.6, 1.0, 0.5, 0.8, 0.55, 0.95, 0.4, 0.75, 0.85, 0.5, 1.0, 0.6, 0.7, 0.4, 0.9, 0.55];
+/* ── Tiny animated waveform inside the brand icon ── */
+function MiniWave() {
+  const h = [0.4, 0.8, 0.55, 1, 0.65, 0.9, 0.5, 0.75, 0.45, 0.85];
   return (
-    <div className="lp-waveform" aria-hidden="true">
-      {amps.map((amp, i) => (
+    <div className="lp-mini-wave" aria-hidden="true">
+      {h.map((amp, i) => (
         <motion.span
           key={i}
-          className="lp-wave-bar"
-          animate={{ scaleY: [amp * 0.5, amp, amp * 0.35, amp * 0.78, amp * 0.5] }}
-          transition={{ duration: 2.1, repeat: Infinity, delay: i * 0.09, ease: 'easeInOut' }}
+          className="lp-mini-bar"
+          animate={{ scaleY: [amp * 0.5, amp, amp * 0.35, amp, amp * 0.5] }}
+          transition={{ duration: 1.8, repeat: Infinity, delay: i * 0.12, ease: 'easeInOut' }}
         />
       ))}
     </div>
   );
 }
 
-function AIOrb() {
+/* ── Feature chip at bottom ── */
+function Chip({ icon: Icon, label }: { icon: React.ElementType; label: string }) {
   return (
-    <div className="lp-orb-wrap" aria-hidden="true">
-      <motion.div
-        className="lp-orb-ring lp-orb-ring-outer"
-        animate={{ scale: [1, 1.4, 1], opacity: [0.5, 0, 0.5] }}
-        transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
-      />
-      <motion.div
-        className="lp-orb-ring lp-orb-ring-mid"
-        animate={{ scale: [1, 1.7, 1], opacity: [0.22, 0, 0.22] }}
-        transition={{ duration: 3, repeat: Infinity, delay: 0.55, ease: 'easeInOut' }}
-      />
-      <motion.div
-        className="lp-orb-core"
-        animate={{ y: [0, -10, 0] }}
-        transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }}
-      >
-        <Mic className="w-9 h-9 text-white" strokeWidth={1.8} />
-      </motion.div>
+    <div className="lp-chip">
+      <Icon className="h-3.5 w-3.5 shrink-0" strokeWidth={2} />
+      {label}
     </div>
   );
 }
 
-function HeroStatCard({
-  icon: Icon,
-  value,
-  label,
-  delay,
-}: {
-  icon: React.ElementType;
-  value: string;
-  label: string;
-  delay: number;
-}) {
+/* ── Floating background orbs (CSS animated) ── */
+function BgOrbs() {
   return (
-    <motion.div
-      className="lp-stat-card"
-      initial={{ opacity: 0, y: 18 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.55, delay, ease: 'easeOut' }}
-    >
-      <span className="lp-stat-icon-wrap">
-        <Icon className="w-4 h-4" strokeWidth={2} />
-      </span>
-      <div className="lp-stat-text">
-        <p className="lp-stat-value">{value}</p>
-        <p className="lp-stat-label">{label}</p>
-      </div>
-    </motion.div>
-  );
-}
-
-function HeroPanel() {
-  return (
-    <div className="lp-hero" aria-label="Product overview">
-      <div className="lp-hero-bg-1" />
-      <div className="lp-hero-bg-2" />
-      <div className="lp-hero-grid" />
-
-      <div className="lp-hero-inner">
-        <motion.span
-          className="lp-kicker"
-          initial={{ opacity: 0, y: -14 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, delay: 0.1 }}
-        >
-          <span className="lp-kicker-dot" />
-          AI-Powered · Clinical Grade · Real-time
-        </motion.span>
-
-        <motion.h1
-          className="lp-hero-headline"
-          initial={{ opacity: 0, y: 28 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.65, delay: 0.2, ease: [0.16, 1, 0.3, 1] }}
-        >
-          AI-Powered<br />
-          <span className="lp-headline-accent">Periodontal</span><br />
-          Charting
-        </motion.h1>
-
-        <motion.p
-          className="lp-hero-sub"
-          initial={{ opacity: 0, y: 18 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, delay: 0.3 }}
-        >
-          Real-time voice charting for modern dental practices.
-        </motion.p>
-
-        <motion.div
-          className="lp-visual"
-          initial={{ opacity: 0, scale: 0.88 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ duration: 0.7, delay: 0.4 }}
-        >
-          <AIOrb />
-          <VoiceWaveform />
-          <p className="lp-live-tag">
-            <span className="lp-live-dot" />
-            Live transcription active
-          </p>
-        </motion.div>
-
-        <div className="lp-stats">
-          <HeroStatCard icon={Activity} value="< 50ms" label="Chart latency" delay={0.55} />
-          <HeroStatCard icon={Stethoscope} value="32 Teeth" label="Full arch" delay={0.65} />
-          <HeroStatCard icon={ShieldCheck} value="HIPAA" label="Ready" delay={0.75} />
-        </div>
-      </div>
+    <div className="lp-orbs" aria-hidden="true">
+      <div className="lp-orb lp-orb-a" />
+      <div className="lp-orb lp-orb-b" />
+      <div className="lp-orb lp-orb-c" />
+      <div className="lp-bg-grid" />
     </div>
   );
 }
+
+/* variants — no inline ease to stay compatible with framer-motion v12 types */
+const cardVariants = {
+  hidden: { opacity: 0, y: 32, scale: 0.97 },
+  visible: { opacity: 1, y: 0, scale: 1 },
+};
+
+const staggerContainer = {
+  hidden: {},
+  visible: { transition: { staggerChildren: 0.07, delayChildren: 0.15 } },
+};
+const rowIn = {
+  hidden: { opacity: 0, y: 14 },
+  visible: { opacity: 1, y: 0 },
+};
 
 export function LoginPage({ onSignIn, onPass }: LoginPageProps) {
-  const [doctorName, setDoctorName] = useState(DEFAULT_DOCTOR_NAME);
-  const [password, setPassword] = useState(DEFAULT_PASSWORD);
+  const [name, setName] = useState(DEFAULT_NAME);
+  const [pass, setPass] = useState(DEFAULT_PASS);
   const [error, setError] = useState<string | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [focused, setFocused] = useState<string | null>(null);
 
-  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const name = doctorName.trim();
-    const pass = password.trim();
-    if (name !== DEFAULT_DOCTOR_NAME || pass !== DEFAULT_PASSWORD) {
-      setError('Invalid credentials — use: Doctor XX / dental123');
+    if (name.trim() !== DEFAULT_NAME || pass.trim() !== DEFAULT_PASS) {
+      setError('Incorrect credentials — try: Doctor XX / dental123');
       return;
     }
-    setIsSubmitting(true);
+    setLoading(true);
     setError(null);
-    setTimeout(() => onSignIn(name), 700);
+    setTimeout(() => onSignIn(name.trim()), 800);
   };
 
   return (
     <div className="lp-shell">
-      <div className="lp-ambient" aria-hidden="true">
-        <div className="lp-ambient-1" />
-        <div className="lp-ambient-2" />
-      </div>
+      <BgOrbs />
 
-      <div className="lp-layout">
-        <HeroPanel />
+      {/* ── Top brand bar ── */}
+      <motion.nav
+        className="lp-topbar"
+        initial={{ opacity: 0, y: -14 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.45 }}
+      >
+        <div className="lp-topbar-brand">
+          <div className="lp-topbar-icon">
+            <Stethoscope className="h-4 w-4 text-white" strokeWidth={2} />
+          </div>
+          <span className="lp-topbar-name">ToothStream</span>
+        </div>
+        <div className="lp-topbar-right">
+          <span className="lp-topbar-badge">
+            <span className="lp-topbar-dot" />
+            Live Demo
+          </span>
+        </div>
+      </motion.nav>
 
+      {/* ── Center content ── */}
+      <div className="lp-center">
+        {/* Auth card */}
         <motion.div
-          className="lp-auth-pane"
-          initial={{ opacity: 0, y: 22 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, delay: 0.2, ease: 'easeOut' }}
+          className="lp-card"
+          variants={cardVariants}
+          initial="hidden"
+          animate="visible"
+          transition={{ duration: 0.55, ease: 'easeOut' }}
         >
-          <div className="lp-auth-card">
-            <div className="lp-auth-header">
-              <span className="lp-auth-badge">
-                <HeartPulse className="h-3.5 w-3.5" strokeWidth={2.2} />
-                Clinical Access
-              </span>
-              <h2 className="lp-auth-title">Welcome back</h2>
-              <p className="lp-auth-subtitle">Sign in to your clinical workspace</p>
-            </div>
+          <motion.div
+            variants={staggerContainer}
+            initial="hidden"
+            animate="visible"
+            transition={{ duration: 0.4 }}
+          >
+            {/* Brand mark */}
+            <motion.div className="lp-brand-mark" variants={rowIn}>
+              <div className="lp-brand-icon">
+                <Mic className="h-6 w-6 text-white" strokeWidth={1.8} />
+              </div>
+              <MiniWave />
+            </motion.div>
 
+            {/* Headline */}
+            <motion.div className="lp-card-head" variants={rowIn}>
+              <h1 className="lp-card-title">Sign in to ToothStream</h1>
+              <p className="lp-card-sub">AI-Powered Periodontal Charting Platform</p>
+            </motion.div>
+
+            <motion.hr className="lp-hr" variants={rowIn} />
+
+            {/* Form */}
             <form onSubmit={handleSubmit} className="lp-form">
-              <div className="lp-field">
-                <label className="lp-field-label" htmlFor="lp-doctor-name">Doctor Name</label>
-                <div className={`lp-input-shell${focused === 'name' ? ' is-focused' : ''}`}>
-                  <User className="lp-input-ico" strokeWidth={2} aria-hidden />
+              <motion.div className="lp-field" variants={rowIn}>
+                <label className="lp-label" htmlFor="ln-name">Doctor Name</label>
+                <div className={`lp-input-wrap${focused === 'name' ? ' focused' : ''}`}>
+                  <User className="lp-ico" strokeWidth={2} aria-hidden />
                   <input
-                    id="lp-doctor-name"
+                    id="ln-name"
                     type="text"
-                    value={doctorName}
-                    onChange={(e) => setDoctorName(e.target.value)}
+                    value={name}
+                    onChange={e => setName(e.target.value)}
                     onFocus={() => setFocused('name')}
                     onBlur={() => setFocused(null)}
-                    className="lp-input"
+                    className="lp-inp"
                     autoComplete="name"
-                    disabled={isSubmitting}
                     autoFocus
+                    disabled={loading}
                     aria-label="Doctor name"
                   />
                 </div>
-              </div>
+              </motion.div>
 
-              <div className="lp-field">
-                <label className="lp-field-label" htmlFor="lp-password">Password</label>
-                <div className={`lp-input-shell${focused === 'password' ? ' is-focused' : ''}`}>
-                  <Lock className="lp-input-ico" strokeWidth={2} aria-hidden />
+              <motion.div className="lp-field" variants={rowIn}>
+                <label className="lp-label" htmlFor="ln-pass">Password</label>
+                <div className={`lp-input-wrap${focused === 'pass' ? ' focused' : ''}`}>
+                  <Lock className="lp-ico" strokeWidth={2} aria-hidden />
                   <input
-                    id="lp-password"
+                    id="ln-pass"
                     type="password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    onFocus={() => setFocused('password')}
+                    value={pass}
+                    onChange={e => setPass(e.target.value)}
+                    onFocus={() => setFocused('pass')}
                     onBlur={() => setFocused(null)}
-                    className="lp-input"
+                    className="lp-inp"
                     autoComplete="current-password"
-                    disabled={isSubmitting}
+                    disabled={loading}
                     aria-label="Password"
                   />
                 </div>
-              </div>
+              </motion.div>
 
               {error != null && (
                 <motion.p
-                  className="lp-error"
-                  initial={{ opacity: 0, y: -6 }}
-                  animate={{ opacity: 1, y: 0 }}
+                  className="lp-err"
+                  initial={{ opacity: 0, y: -8, height: 0 }}
+                  animate={{ opacity: 1, y: 0, height: 'auto' }}
+                  exit={{ opacity: 0, y: -8, height: 0 }}
                   transition={{ duration: 0.22 }}
                 >
                   {error}
                 </motion.p>
               )}
 
-              <motion.button
-                type="submit"
-                disabled={isSubmitting}
-                className="lp-submit"
-                whileHover={{ scale: 1.012, y: -2 }}
-                whileTap={{ scale: 0.978 }}
-              >
-                {isSubmitting ? (
-                  <span className="lp-spinner-row">
-                    <motion.span
-                      className="lp-spinner"
-                      animate={{ rotate: 360 }}
-                      transition={{ duration: 0.7, repeat: Infinity, ease: 'linear' }}
-                    />
-                    Opening workspace…
-                  </span>
-                ) : (
-                  'Sign In'
-                )}
-              </motion.button>
+              <motion.div variants={rowIn}>
+                <motion.button
+                  type="submit"
+                  disabled={loading}
+                  className="lp-btn-primary"
+                  whileHover={loading ? {} : { scale: 1.012, y: -2 }}
+                  whileTap={loading ? {} : { scale: 0.978 }}
+                >
+                  {loading ? (
+                    <span className="lp-spin-row">
+                      <motion.span
+                        className="lp-spinner"
+                        animate={{ rotate: 360 }}
+                        transition={{ duration: 0.7, repeat: Infinity, ease: 'linear' }}
+                      />
+                      Opening workspace…
+                    </span>
+                  ) : 'Sign In'}
+                </motion.button>
+              </motion.div>
 
-              <button type="button" onClick={onPass} className="lp-ghost">
-                Continue without signing in
-              </button>
+              <motion.div variants={rowIn}>
+                <button type="button" onClick={onPass} className="lp-btn-ghost">
+                  Continue without signing in
+                </button>
+              </motion.div>
             </form>
 
-            <div className="lp-auth-footer">
-              <ShieldCheck className="h-3.5 w-3.5 shrink-0 text-slate-400" strokeWidth={2.2} />
-              Secure clinical workspace
-            </div>
-          </div>
+            <motion.div className="lp-footer" variants={rowIn}>
+              <ShieldCheck className="h-3.5 w-3.5 shrink-0 text-slate-400" strokeWidth={2} />
+              End-to-end secure · HIPAA-ready workspace
+            </motion.div>
+          </motion.div>
+        </motion.div>
+
+        {/* Feature chips below card */}
+        <motion.div
+          className="lp-chips"
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.6 }}
+        >
+          <Chip icon={Zap} label="< 50ms latency" />
+          <Chip icon={Stethoscope} label="32-tooth chart" />
+          <Chip icon={HeartPulse} label="Deepgram AI" />
+          <Chip icon={ShieldCheck} label="HIPAA ready" />
         </motion.div>
       </div>
     </div>
