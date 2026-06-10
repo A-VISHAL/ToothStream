@@ -4,7 +4,7 @@
 <br/>
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="https://capsule-render.vercel.app/api?type=waving&color=0:0d1117,50:00d4aa,100:00a8ff&height=200&section=header&text=ToothStream&fontSize=62&fontColor=ffffff&fontAlignY=38&desc=AI-Powered%20Real-Time%20Periodontal%20Voice%20Charting&descSize=16&descAlignY=58&animation=fadeIn"/>
+  <source media="(prefers-color-scheme: light)" srcset="https://capsule-render.vercel.app/api?type=waving&color=0:0d1117,50:00d4aa,100:00a8ff&height=200&section=header&text=ToothStream&fontSize=62&fontColor=ffffff&fontAlignY=38&desc=AI-Powered%20Real-Time%20Periodontal%20Voice%20Charting&descSize=16&descAlignY=58&animation=fadeIn"/>
   <img src="https://capsule-render.vercel.app/api?type=waving&color=0:0d1117,50:00d4aa,100:00a8ff&height=200&section=header&text=ToothStream&fontSize=62&fontColor=ffffff&fontAlignY=38&desc=AI-Powered%20Real-Time%20Periodontal%20Voice%20Charting&descSize=16&descAlignY=58&animation=fadeIn" width="100%"/>
 </picture>
 
