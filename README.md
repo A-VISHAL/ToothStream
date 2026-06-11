@@ -624,7 +624,7 @@ cd frontend && npm install && PORT=3002 npm start
 
 <div align="center">
 
-**Built for the Agentics Foundation · Dental Innovation Sprint · June 2026**
+
 
 [![Try It](https://img.shields.io/badge/▶_Try_It_Live-tooth--stream.vercel.app-00d4aa?style=for-the-badge&labelColor=0d1117)](https://tooth-stream.vercel.app)
 
