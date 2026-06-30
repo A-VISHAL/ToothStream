@@ -88,34 +88,15 @@
 
 <div align="center">
 
-# Technical Write-up (200 Words)
+<h2>Technical Write-up (200 Words)</h2>
 
-<a href="./Technical_Writeup.pdf">
+<p>
+A detailed overview of the system architecture, AI pipeline, latency strategy,
+sequencing approach, engineering decisions, and known limitations.
+</p>
 
-<table>
-<tr>
-<td align="center" width="700">
-
-<h2>📄 Technical_Writeup.pdf</h2>
-
-Complete 200-word technical write-up covering:
-
-• Deepgram Nova-3 STT<br>
-• Oxlo API Integration<br>
-• AI Pipeline<br>
-• Latency Optimization<br>
-• Tooth Sequencing Logic<br>
-• Engineering Challenges<br>
-• Current Limitations
-
-<br><br>
-
-<b>CLICK HERE TO OPEN THE PDF</b>
-
-</td>
-</tr>
-</table>
-
+<a href="./200%20WORDS%20RIGHT%20UP.pdf" target="_blank">
+  <img src="https://img.shields.io/badge/View%20Technical%20Write--up-PDF-red?style=for-the-badge&logo=adobeacrobatreader&logoColor=white" height="60">
 </a>
 
 </div>
