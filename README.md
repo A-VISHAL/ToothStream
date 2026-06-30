@@ -88,16 +88,17 @@
 
 <div align="center">
 
-<h2>Technical Write-up (200 Words)</h2>
+# Technical Write-up (200 Words)
 
-<p>
-A detailed overview of the system architecture, AI pipeline, latency strategy,
-sequencing approach, engineering decisions, and known limitations.
-</p>
+### Click the card below to open the PDF.
 
-<a href="./200%20WORDS%20RIGHT%20UP.pdf" target="_blank">
-  <img src="https://img.shields.io/badge/View%20Technical%20Write--up-PDF-red?style=for-the-badge&logo=adobeacrobatreader&logoColor=white" height="60">
+<a href="./Technical_Writeup.pdf">
+
+<img src="https://img.shields.io/badge/CLICK%20HERE%20TO%20OPEN%20THE%20TECHNICAL%20WRITE--UP-PDF-blue?style=for-the-badge&logo=adobeacrobatreader&logoColor=white" height="75"/>
+
 </a>
+
+<p><b>PDF Document • AI Pipeline • Architecture • Engineering Decisions • Challenges • Limitations</b></p>
 
 </div>
 ---
