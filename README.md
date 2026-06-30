@@ -48,6 +48,61 @@
 
 <br/>
 
+<!-- ======================= TECHNICAL WRITE-UP ======================= -->
+
+<img src="https://capsule-render.vercel.app/api?type=rect&color=gradient&customColorList=0,2,5,30&height=60&section=header&text=Technical%20Write-up&fontSize=28&fontColor=ffffff&animation=fadeIn" width="100%"/>
+
+<div align="center">
+
+## Technical Design Summary
+
+<img src="https://img.shields.io/badge/Deepgram-Nova--3-00C4B3?style=for-the-badge"/>
+<img src="https://img.shields.io/badge/Oxlo-API-7C3AED?style=for-the-badge"/>
+<img src="https://img.shields.io/badge/FastAPI-WebSocket-009688?style=for-the-badge"/>
+<img src="https://img.shields.io/badge/Length-200%20Words-2563EB?style=for-the-badge"/>
+
+</div>
+
+---
+
+---
+
+<div align="center">
+
+
+
+| Technical Contents | Key Highlights |
+|:------------------:|:--------------:|
+| Deepgram Nova-3 Streaming Speech-to-Text | Real-time voice transcription |
+| Oxlo API Integration | Clinical command interpretation |
+| Real-Time Audio Streaming Pipeline | Automatic tooth progression |
+| Latency Optimization Strategy | Live SVG chart rendering |
+| Tooth Sequencing State Machine | React state synchronization |
+| WebSocket Architecture | Low-latency WebSocket communication |
+| Engineering Challenges & Solutions | Robust payload handling |
+| Current Limitations | Production-ready architecture |
+
+</div>
+
+---
+
+<div align="center">
+
+## Technical Write-up (200 Words)
+
+The complete technical write-up describing the AI pipeline, latency strategy, sequencing logic, implementation challenges, engineering decisions, and current limitations is available below.
+
+<br>
+
+<a href="./Technical_Writeup.pdf">
+<img src="https://img.shields.io/badge/Open%20Technical%20Write--up-111827?style=for-the-badge&logo=adobeacrobatreader&logoColor=white"/>
+</a>
+
+</div>
+
+---
+
+
 ## 🩺 The Problem
 
 <table>
