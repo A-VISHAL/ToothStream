@@ -132,7 +132,7 @@ Collapse │ Chart drifts after missing tooth / surface
 
 ### Click the video preview below to watch the demo on YouTube
 
-[![ToothStream Video Demo](https://img.youtube.com/vi/Cn1Z-08SIXo/maxresdefault.jpg)](https://youtu.be/Cn1Z-08SIXo?si=60gPr1kKtyErD3DC)
+[![ToothStream Video Demo](https://img.youtube.com/vi/vYSC6dBcL9M/maxresdefault.jpg)](https://youtu.be/vYSC6dBcL9M?si=bUD4asQTYt1wcsIV)
 
 </div>
 
