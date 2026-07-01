@@ -48,57 +48,30 @@
 
 <br/>
 
-<!-- ======================= TECHNICAL WRITE-UP ======================= -->
+<!-- ======================= PROJECT DOCUMENTS ======================= -->
 
-<img src="https://capsule-render.vercel.app/api?type=rect&color=gradient&customColorList=0,2,5,30&height=60&section=header&text=Technical%20Write-up&fontSize=28&fontColor=ffffff&animation=fadeIn" width="100%"/>
-
-<div align="center">
-
-## Technical Design Summary
-
-<img src="https://img.shields.io/badge/Deepgram-Nova--3-00C4B3?style=for-the-badge"/>
-<img src="https://img.shields.io/badge/Oxlo-API-7C3AED?style=for-the-badge"/>
-<img src="https://img.shields.io/badge/FastAPI-WebSocket-009688?style=for-the-badge"/>
-<img src="https://img.shields.io/badge/Length-200%20Words-2563EB?style=for-the-badge"/>
-
-</div>
-
----
-
----
+<img src="https://capsule-render.vercel.app/api?type=rect&color=gradient&customColorList=0,2,5,30&height=60&section=header&text=Project%20Documents&fontSize=28&fontColor=ffffff&animation=fadeIn" width="100%"/>
 
 <div align="center">
 
+## 📄 Project Documentation & Guides
 
+### 📝 200-Word Technical Write-up
+Click the card below to open the **200 Words Write-up** PDF.
 
-| Technical Contents | Key Highlights |
-|:------------------:|:--------------:|
-| Deepgram Nova-3 Streaming Speech-to-Text | Real-time voice transcription |
-| Oxlo API Integration | Clinical command interpretation |
-| Real-Time Audio Streaming Pipeline | Automatic tooth progression |
-| Latency Optimization Strategy | Live SVG chart rendering |
-| Tooth Sequencing State Machine | React state synchronization |
-| WebSocket Architecture | Low-latency WebSocket communication |
-| Engineering Challenges & Solutions | Robust payload handling |
-| Current Limitations | Production-ready architecture |
-
-</div>
-
----
-
-<div align="center">
-
-# Technical Write-up (200 Words)
-
-### Click the card below to open the PDF.
-
-<a href="./Technical_Writeup.pdf">
-
-<img src="https://img.shields.io/badge/CLICK%20HERE%20TO%20OPEN%20THE%20TECHNICAL%20WRITE--UP-PDF-blue?style=for-the-badge&logo=adobeacrobatreader&logoColor=white" height="75"/>
-
+<a href="./200%20WORDS%20RIGHT%20UP.pdf">
+<img src="https://img.shields.io/badge/200%20WORDS%20WRITE%20UP-PDF-blue?style=for-the-badge&logo=adobeacrobatreader&logoColor=white" height="60"/>
 </a>
 
-<p><b>PDF Document • AI Pipeline • Architecture • Engineering Decisions • Challenges • Limitations</b></p>
+<br/>
+<br/>
+
+### 🎙️ Supported Voice Commands
+Click the card below to open the **Supported Voice Commands** guide PDF.
+
+<a href="./ToothStream_Supported_Voice_Commands.pdf">
+<img src="https://img.shields.io/badge/SUPPORTED%20VOICE%20COMMANDS-PDF-emerald?style=for-the-badge&logo=adobeacrobatreader&logoColor=white" height="60"/>
+</a>
 
 </div>
 ---
@@ -152,6 +125,21 @@ Collapse │ Chart drifts after missing tooth / surface
 <br/>
 <img src="https://capsule-render.vercel.app/api?type=rect&color=gradient&customColorList=0,2,2,5,30&height=3&section=header" width="100%"/>
 <br/>
+
+## 📺 Video Demo
+
+<div align="center">
+
+### Click the video preview below to watch the demo on YouTube
+
+[![ToothStream Video Demo](https://img.youtube.com/vi/Cn1Z-08SIXo/maxresdefault.jpg)](https://youtu.be/Cn1Z-08SIXo?si=60gPr1kKtyErD3DC)
+
+</div>
+
+<br/>
+<img src="https://capsule-render.vercel.app/api?type=rect&color=gradient&customColorList=0,2,2,5,30&height=3&section=header" width="100%"/>
+<br/>
+
 
 ## 🔄 How It Works
 
