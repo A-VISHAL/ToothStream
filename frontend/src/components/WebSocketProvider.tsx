@@ -193,6 +193,11 @@ function ingestPayload(
   const payloadTimestamp = hydrated.timestamp ?? receivedAt;
   const hasTriplet = Array.isArray(hydrated.depth) && hydrated.depth.length === SITE_COUNT && !hydrated.missing;
   const currentCommittedTooth = lastCommittedToothRef.current ?? fallbackTooth;
+
+  if (typeof hydrated.tooth === 'number') {
+    lastTripletContextRef.current = null;
+  }
+
   const previousTripletContext = lastTripletContextRef.current;
   const shouldSnapshot =
     typeof hydrated.tooth === 'number' ||
