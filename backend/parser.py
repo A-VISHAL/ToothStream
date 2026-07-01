@@ -207,9 +207,14 @@ def extract_triplet(tokens: list[str], consumed_indices: set[int]) -> list[int] 
             index += 1
             continue
 
-        values.append(candidate)
-        if len(values) == 3:
-            return values
+        if candidate >= 10:
+            for digit_char in str(candidate):
+                values.append(int(digit_char))
+        else:
+            values.append(candidate)
+
+        if len(values) >= 3:
+            return values[:3]
 
         index += length
 

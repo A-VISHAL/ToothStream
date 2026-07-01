@@ -66,6 +66,8 @@ const HOMOPHONE_NORMALIZATIONS: Record<string, string> = {
   through: 'three',
   tree: 'three',
   twos: 'tooth',
+  to: 'two',
+  too: 'two',
 };
 
 const CLINICAL_KEYWORDS = new Set([
@@ -202,20 +204,6 @@ function parseProtectedDepthTriplet(transcript: string, context?: TranscriptPars
   }
 
   const rawTokens = tokenizeRaw(transcript);
-
-  if (rawTokens.length !== 3) {
-    return undefined;
-  }
-
-  if (rawTokens[1] === 'to') {
-    const first = parseNumberToken(rawTokens[0] ?? '');
-    const third = parseNumberToken(rawTokens[2] ?? '');
-
-    if (first !== null && third !== null) {
-      return [first, 2, third];
-    }
-  }
-
   return parseDepthTriplet(rawTokens);
 }
 
@@ -495,21 +483,28 @@ function parseDepthTriplet(tokens: string[]): number[] | undefined {
     }
   }
 
-  const values = tokens.map(parseNumberToken).filter((value): value is number => value !== null);
+  const values = tokens.map((t) => (t === 'to' || t === 'too' ? 2 : parseNumberToken(t))).filter((value): value is number => value !== null);
 
-  if (values.length !== 3) {
-    return undefined;
+  const flattened: number[] = [];
+  for (const val of values) {
+    if (val >= 10 && val <= 999) {
+      const digits = String(val).split('').map((d) => Number.parseInt(d, 10));
+      flattened.push(...digits);
+    } else {
+      flattened.push(val);
+    }
   }
 
-  return [values[0], values[1], values[2]];
+  if (flattened.length === 3) {
+    return [flattened[0], flattened[1], flattened[2]];
+  }
+
+  return undefined;
 }
 
 function isStandaloneDepthTriplet(tokens: string[]): boolean {
-  if (tokens.length !== 3) {
-    return false;
-  }
-
-  return tokens.every((token) => parseNumberToken(token) !== null);
+  const result = parseDepthTriplet(tokens);
+  return result !== undefined && result.length === 3;
 }
 
 function extractTooth(tokens: string[], context?: TranscriptParseContext): number | undefined {
