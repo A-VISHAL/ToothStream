@@ -352,16 +352,30 @@ async def websocket_audio_endpoint(websocket: WebSocket) -> None:
                 logger.exception("Deepgram bridge error: %s", exc)
 
                 if websocket.client_state == WebSocketState.CONNECTED:
-                    await send_bridge_status(
-                        websocket,
-                        send_lock,
-                        "error" if fatal else "reconnecting",
-                        phase="deepgram_connect" if fatal else "deepgram_stream",
-                        detail=message,
-                        message="Speech-to-text connection failed." if fatal else "Speech-to-text stream interrupted.",
-                        fatal=fatal,
-                        retryInMs=None if fatal else int(reconnect_delay * 1000),
-                    )
+                    if fatal:
+                        await safe_send_json(
+                            websocket,
+                            send_lock,
+                            {
+                                "type": "error",
+                                "message": "Speech-to-text connection failed.",
+                                "detail": message,
+                                "fatal": True,
+                                "phase": "deepgram_connect",
+                            }
+                        )
+                    else:
+                        await send_bridge_status(
+                            websocket,
+                            send_lock,
+                            "reconnecting",
+                            phase="deepgram_stream",
+                            detail=message,
+                            message="Speech-to-text stream interrupted.",
+                            fatal=False,
+                            retryInMs=int(reconnect_delay * 1000),
+                        )
+
 
                 if fatal:
                     stop_event.set()

@@ -194,9 +194,10 @@ function ingestPayload(
   const hasTriplet = Array.isArray(hydrated.depth) && hydrated.depth.length === SITE_COUNT && !hydrated.missing;
   const currentCommittedTooth = lastCommittedToothRef.current ?? fallbackTooth;
 
-  if (typeof hydrated.tooth === 'number') {
+  if (hydrated.explicitTooth === true) {
     lastTripletContextRef.current = null;
   }
+
 
   const previousTripletContext = lastTripletContextRef.current;
   const shouldSnapshot =
@@ -911,6 +912,7 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
       updateActiveRef(tooth, surface ?? null, surface ? 0 : null);
       lastCommittedToothRef.current = tooth;
       implantContextActiveRef.current = false;
+      lastTripletContextRef.current = null;
       updateParserContext('navigation', surface ? 'depth-triplet' : 'surface');
       toothCommitPendingRef.current = true;
       awaitingAdditionalFindingsRef.current = true;
@@ -935,6 +937,7 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
       updateActiveRef(currentTooth, surface, 0);
       lastCommittedToothRef.current = currentTooth;
       implantContextActiveRef.current = false;
+      lastTripletContextRef.current = null;
       updateParserContext('probing', 'depth-triplet');
       toothCommitPendingRef.current = true;
       awaitingAdditionalFindingsRef.current = true;
@@ -970,6 +973,7 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
       updateActiveRef(nextTooth, currentSurface, currentSurface ? 0 : null);
       lastCommittedToothRef.current = nextTooth;
       implantContextActiveRef.current = false;
+      lastTripletContextRef.current = null;
       updateParserContext('navigation', currentSurface ? 'depth-triplet' : 'surface');
       toothCommitPendingRef.current = true;
       awaitingAdditionalFindingsRef.current = true;
@@ -1007,6 +1011,7 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
     updateActiveRef(snapshot.currentTooth, snapshot.currentSurface, snapshot.activeSiteIndex);
     lastCommittedToothRef.current = snapshot.currentTooth;
     implantContextActiveRef.current = false;
+    lastTripletContextRef.current = null;
     updateParserContext(snapshot.parserMode, snapshot.expectedInput);
     setLastPayload(snapshot.lastPayload);
     flashFeedback({ kind: 'undo', message: 'UNDO APPLIED' });
